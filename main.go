@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -13,16 +14,20 @@ import (
 	"github.com/mochi-co/mqtt/server/listeners/auth"
 )
 
+var language string
+
 func main() {
-	logPrint("i", "MQTT 服务器测试程序 v0.0.1")
+	flag.StringVar(&language, "l", "en", "Language")
+	flag.Parse()
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
+	logPrint("i", lang("TITLE")+" v0.0.1")
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigs
 		done <- true
 	}()
-	logPrint("i", "正在启动 MQTT 服务器... (端口 TCP/1883 )")
+	logPrint("i", lang("BOOTING"))
 	server := mqtt.NewServer(nil)
 	tcp := listeners.NewTCP("t1", ":1883")
 	err := server.AddListener(tcp, &listeners.Config{
@@ -35,17 +40,17 @@ func main() {
 	go func() {
 		err := server.Serve()
 		if err != nil {
-			logPrint("X", "启动 MQTT 服务器失败：")
+			logPrint("X", lang("SERVERFAIL"))
 			log.Fatal(err)
 		}
 	}()
 
-	logPrint("i", "MQTT 服务器已启动。")
+	logPrint("i", lang("BOOTOK"))
 
 	<-done
-	logPrint("X", "收到停止请求，正在停止...")
+	logPrint("X", lang("NEEDSTOP"))
 	server.Close()
-	logPrint("i", "运行结束。")
+	logPrint("i", lang("END"))
 }
 
 func logPrint(iconChar string, text string) {
