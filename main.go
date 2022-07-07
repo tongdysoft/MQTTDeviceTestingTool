@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,14 +20,40 @@ import (
 var language string
 
 func main() {
+	var onlyID string
+	var onlyIDs []string = []string{}
+	var onlyIDe bool = false
+	var onlyTopic string
+	var onlyTopics []string = []string{}
+	var onlyTopice bool = false
+	var onlyPayload string
+	var onlyPayloads []string = []string{}
+	var onlyPayloade bool = false
 	// 初始化启动参数
+	logPrint("i", lang("TITLE")+" v0.0.1")
 	flag.StringVar(&language, "l", "en", "Language")
-
+	flag.StringVar(&onlyID, "c", "", "Only allow these client IDs (comma separated)")
+	flag.StringVar(&onlyTopic, "t", "", "Only allow these topics (comma separated)")
+	flag.StringVar(&onlyPayload, "w", "", "Only allow these words in message content (comma separated)")
 	flag.Parse()
+	if len(onlyID) > 0 {
+		onlyIDs = strings.Split(onlyID, ",")
+		logPrint("i", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("CLIENT"), onlyIDs))
+		onlyIDe = true
+	}
+	if len(onlyTopic) > 0 {
+		onlyTopics = strings.Split(onlyTopic, ",")
+		logPrint("i", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("TOPIC"), onlyTopics))
+		onlyTopice = true
+	}
+	if len(onlyPayload) > 0 {
+		onlyPayloads = strings.Split(onlyPayload, ",")
+		logPrint("i", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("WORD"), onlyPayloads))
+		onlyPayloade = true
+	}
+	// 监听结束信号
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
-	// 监听结束信号
-	logPrint("i", lang("TITLE")+" v0.0.1")
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigs
@@ -64,7 +92,28 @@ func main() {
 	// 收到消息
 	server.Events.OnMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {
 		pkx = pk
-		logPrint("i", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), cl.ID, lang("TOPIC"), string(pkx.TopicName), lang("PAYLOAD"), string(pkx.Payload)))
+		var clID string = cl.ID
+		if onlyIDe && !in(onlyIDs, clID) {
+			return
+		}
+		var topic string = pkx.TopicName
+		if onlyTopice && !in(onlyTopics, topic) {
+			return
+		}
+		var payload string = string(pkx.Payload)
+		if onlyPayloade {
+			var inWord bool = false
+			for _, word := range onlyPayloads {
+				if strings.Contains(payload, word) {
+					inWord = true
+					break
+				}
+			}
+			if !inWord {
+				return
+			}
+		}
+		logPrint("i", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), clID, lang("TOPIC"), topic, lang("PAYLOAD"), payload))
 		return pk, nil
 	}
 	// 收到取消订阅请求
@@ -84,4 +133,13 @@ func logPrint(iconChar string, text string) {
 	var currentTime time.Time = time.Now()
 	var timeStr string = currentTime.Format("2006-01-02 15:04:05")
 	fmt.Printf("[%s][%s] %s\n", iconChar, timeStr, text)
+}
+
+func in(strArr []string, str string) bool {
+	sort.Strings(strArr)
+	index := sort.SearchStrings(strArr, str)
+	if index < len(strArr) && strArr[index] == str {
+		return true
+	}
+	return false
 }

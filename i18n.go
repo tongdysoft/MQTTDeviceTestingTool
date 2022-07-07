@@ -13,8 +13,10 @@ var langs map[string][]string = map[string][]string{
 	"SUBSCRIBED":   {"Subscribed", "开始订阅主题"},
 	"UNSUBSCRIBED": {"Unsubscribed", "取消订阅主题"},
 	"MESSAGE":      {"Received message, From", "收到消息，发件人"},
+	"ONLY":         {"Only allowed", "只允许这些"},
 	"TOPIC":        {"Topic", "主题"},
 	"PAYLOAD":      {"Payload", "内容"},
+	"WORD":         {"Word", "关键词"},
 }
 
 func lang(title string) string {
