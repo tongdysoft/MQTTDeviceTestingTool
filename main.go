@@ -19,10 +19,13 @@ import (
 var (
 	language   string
 	timeFormat string = "2006-01-02 15:04:05"
+	logFile    string
 	logData    string
 	logStatus  string
+	logFileE   bool = false
 	logDataE   bool = false
 	logStatusE bool = false
+	logFileF   *os.File
 	logDataF   *os.File
 	logStatusF *os.File
 )
@@ -47,6 +50,7 @@ func main() {
 	flag.StringVar(&onlyPayload, "w", "", "Only allow these words in message content (comma separated)")
 	flag.StringVar(&logData, "d", "", "Log data to csv file")
 	flag.StringVar(&logStatus, "s", "", "Log state changes to a csv file")
+	flag.StringVar(&logFile, "o", "", "Save log to TXT file")
 	flag.Parse()
 	// 初始化设置
 	if len(onlyID) > 0 {
@@ -145,6 +149,9 @@ func main() {
 	<-done
 	logPrint("X", lang("NEEDSTOP"))
 	server.Close()
+	if logFileE {
+		logFileF.Close()
+	}
 	if logDataE {
 		logDataF.Close()
 	}
