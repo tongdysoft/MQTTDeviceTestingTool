@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/logrusorgru/aurora"
 )
 
 func logInit() {
@@ -15,7 +17,7 @@ func logInit() {
 			logPrint("X", fmt.Sprintf("%s %s: %s", lang("LOGFAIL"), lang("LOGDATA"), err))
 		} else {
 			logDataF = file
-			logPrint("i", fmt.Sprintf("%s: %s", lang("LOGDATA"), logData))
+			logPrint("C", fmt.Sprintf("%s: %s", lang("LOGDATA"), logData))
 			logDataE = true
 			logFileStr(true, lang("START"), "", "")
 		}
@@ -26,7 +28,7 @@ func logInit() {
 			logPrint("X", fmt.Sprintf("%s %s: %s", lang("LOGFAIL"), lang("LOGSTAT"), err))
 		} else {
 			logStatusF = file
-			logPrint("i", fmt.Sprintf("%s: %s", lang("LOGSTAT"), logStatus))
+			logPrint("C", fmt.Sprintf("%s: %s", lang("LOGSTAT"), logStatus))
 			logStatusE = true
 			logFileStr(true, lang("START"), "", "")
 		}
@@ -37,7 +39,7 @@ func logInit() {
 			logPrint("X", fmt.Sprintf("%s %s: %s", lang("LOGFAIL"), lang("LOG"), err))
 		} else {
 			logFileF = file
-			logPrint("i", fmt.Sprintf("%s: %s", lang("LOG"), logFile))
+			logPrint("C", fmt.Sprintf("%s: %s", lang("LOG"), logFile))
 			logFileE = true
 			logFileStr(true, lang("START"), "", "")
 		}
@@ -46,12 +48,39 @@ func logInit() {
 
 func logPrint(iconChar string, text string) {
 	var timeStr string = time.Now().Format(timeFormat)
-	var log string = fmt.Sprintf("[%s][%s] %s\n", iconChar, timeStr, text)
-	fmt.Print(log)
+	var log0 string = fmt.Sprintf("[%s][%s]", iconChar, timeStr)
+	var log1 string = fmt.Sprintf(" %s\n", text)
 	if logFileE {
 		write := bufio.NewWriter(logFileF)
-		write.WriteString(log)
+		write.WriteString(log0)
+		write.WriteString(log1)
 		write.Flush()
+	}
+	switch iconChar {
+	case "M": // 信息
+		fmt.Print(aurora.BgMagenta(log0))
+		fmt.Print(aurora.Magenta(log1))
+	case "C": // 配置
+		fmt.Print(aurora.BrightWhite(log0))
+		fmt.Print(aurora.BrightWhite(log1))
+	case "L": // 连接
+		fmt.Print(aurora.BgGreen(log0))
+		fmt.Print(aurora.Green(log1))
+	case "D": // 断开
+		fmt.Print(aurora.BgYellow(log0))
+		fmt.Print(aurora.Yellow(log1))
+	case "S": // 订阅
+		fmt.Print(aurora.BgCyan(log0))
+		fmt.Print(aurora.Cyan(log1))
+	case "U": // 取消订阅
+		fmt.Print(aurora.BgBlue(log0))
+		fmt.Print(aurora.Blue(log1))
+	case "X": // 错误
+		fmt.Print(aurora.BgRed(log0))
+		fmt.Print(aurora.Red(log1))
+	default:
+		fmt.Print(log0)
+		fmt.Print(log1)
 	}
 }
 

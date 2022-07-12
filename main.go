@@ -1,3 +1,4 @@
+//go:generate goversioninfo -icon=rc.ico -manifest=main.exe.manifest
 package main
 
 import (
@@ -43,29 +44,29 @@ func main() {
 		onlyPayloadS []string = []string{}
 	)
 	// 初始化启动参数
-	logPrint("i", lang("TITLE")+" v0.0.1")
-	flag.StringVar(&language, "l", "en", "Language")
+	logPrint("i", lang("TITLE")+" v1.0.0")
+	flag.StringVar(&language, "l", "en", "Language ( en(default) | cn )")
 	flag.StringVar(&onlyID, "c", "", "Only allow these client IDs (comma separated)")
 	flag.StringVar(&onlyTopic, "t", "", "Only allow these topics (comma separated)")
 	flag.StringVar(&onlyPayload, "w", "", "Only allow these words in message content (comma separated)")
-	flag.StringVar(&logData, "d", "", "Log data to csv file")
+	flag.StringVar(&logData, "m", "", "Log message to csv file")
 	flag.StringVar(&logStatus, "s", "", "Log state changes to a csv file")
-	flag.StringVar(&logFile, "o", "", "Save log to TXT file")
+	flag.StringVar(&logFile, "o", "", "Save log to txt/log file")
 	flag.Parse()
 	// 初始化设置
 	if len(onlyID) > 0 {
 		onlyIdS = strings.Split(onlyID, ",")
-		logPrint("i", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("CLIENT"), onlyIdS))
+		logPrint("C", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("CLIENT"), onlyIdS))
 		onlyIdE = true
 	}
 	if len(onlyTopic) > 0 {
 		onlyTopicS = strings.Split(onlyTopic, ",")
-		logPrint("i", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("TOPIC"), onlyTopicS))
+		logPrint("C", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("TOPIC"), onlyTopicS))
 		onlyTopicE = true
 	}
 	if len(onlyPayload) > 0 {
 		onlyPayloadS = strings.Split(onlyPayload, ",")
-		logPrint("i", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("WORD"), onlyPayloadS))
+		logPrint("C", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("WORD"), onlyPayloadS))
 		onlyPayloadE = true
 	}
 	logInit()
@@ -98,22 +99,22 @@ func main() {
 	// 有设备连接到服务器
 	server.Events.OnConnect = func(cl events.Client, pk events.Packet) {
 		logFileStr(true, lang("CONNECT"), cl.ID, strings.ReplaceAll(fmt.Sprint(pk), "\n", ""))
-		logPrint("+", fmt.Sprintf("%s %s %s: %+v", lang("CLIENT"), cl.ID, lang("CONNECT"), pk))
+		logPrint("L", fmt.Sprintf("%s %s %s: %+v", lang("CLIENT"), cl.ID, lang("CONNECT"), pk))
 	}
 	// 设备断开连接
 	server.Events.OnDisconnect = func(cl events.Client, err error) {
 		logFileStr(true, lang("DISCONNECT"), cl.ID, strings.ReplaceAll(fmt.Sprint(err), "\n", ""))
-		logPrint("-", fmt.Sprintf("%s %s %s: %v", lang("CLIENT"), cl.ID, lang("DISCONNECT"), err))
+		logPrint("D", fmt.Sprintf("%s %s %s: %v", lang("CLIENT"), cl.ID, lang("DISCONNECT"), err))
 	}
 	// 收到订阅请求
 	server.Events.OnSubscribe = func(filter string, cl events.Client, qos byte) {
 		logFileStr(true, lang("SUBSCRIBED"), filter, fmt.Sprintf("QOS%d", qos))
-		logPrint("+", fmt.Sprintf("%s %s %s %s, (QOS:%v)", lang("CLIENT"), cl.ID, lang("SUBSCRIBED"), filter, qos))
+		logPrint("S", fmt.Sprintf("%s %s %s %s, (QOS:%v)", lang("CLIENT"), cl.ID, lang("SUBSCRIBED"), filter, qos))
 	}
 	// 收到取消订阅请求
 	server.Events.OnUnsubscribe = func(filter string, cl events.Client) {
 		logFileStr(true, lang("SUBSCRIBED"), filter, "")
-		logPrint("-", fmt.Sprintf("%s %s %s %s)", lang("CLIENT"), cl.ID, lang("UNSUBSCRIBED"), filter))
+		logPrint("U", fmt.Sprintf("%s %s %s %s)", lang("CLIENT"), cl.ID, lang("UNSUBSCRIBED"), filter))
 	}
 	// 收到消息
 	server.Events.OnMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {
@@ -140,7 +141,7 @@ func main() {
 			}
 		}
 		logFileStr(false, clID, topic, payload)
-		logPrint("i", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), clID, lang("TOPIC"), topic, lang("PAYLOAD"), payload))
+		logPrint("M", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), clID, lang("TOPIC"), topic, lang("PAYLOAD"), payload))
 		return pk, nil
 	}
 	// 启动完毕
