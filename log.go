@@ -67,14 +67,14 @@ func logPrint(iconChar string, text string) {
 		fmt.Print(aurora.BgGreen(log0))
 		fmt.Print(aurora.Green(log1))
 	case "D": // 断开
-		fmt.Print(aurora.BgYellow(log0))
-		fmt.Print(aurora.Yellow(log1))
+		fmt.Print(aurora.BgRed(log0))
+		fmt.Print(aurora.Red(log1))
 	case "S": // 订阅
 		fmt.Print(aurora.BgCyan(log0))
 		fmt.Print(aurora.Cyan(log1))
 	case "U": // 取消订阅
-		fmt.Print(aurora.BgBlue(log0))
-		fmt.Print(aurora.Blue(log1))
+		fmt.Print(aurora.BgYellow(log0))
+		fmt.Print(aurora.Yellow(log1))
 	case "X": // 错误
 		fmt.Print(aurora.BgRed(log0))
 		fmt.Print(aurora.Red(log1))

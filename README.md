@@ -1,6 +1,9 @@
 # MQTT client test tool
 This tool can help you test the stability of your device's MQTT connection.
 
+- version: `1.0.0`
+- golang version: `1.18.2`
+
 ## Install
 Download the program from Release. No installation required.
 
@@ -10,6 +13,9 @@ Command: mqtt-test-server `< -c .. | -d .. | -l .. | -o .. | -s .. | -t .. | -w 
 
 - `-l string`
   - Language ( `en(default) | cn` )
+- `-p string`
+  - Define listening on IP:Port (default: `127.0.0.1:1883` )
+  - To allow all IP addresses: `:1883`
 - `-c string`
   - Only allow these client IDs ( `,` separated)
 - `-t string`
@@ -26,13 +32,18 @@ Command: mqtt-test-server `< -c .. | -d .. | -l .. | -o .. | -s .. | -t .. | -w 
 ## Build
 
 ```
-go get .
-go generate
+go get .     # Need internet
+go generate  # Windows only
 go build .
 ```
 
+Build all platforms under Windows: `build.bat`
+
 # MQTT 客户端测试工具
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
+
+- 版本: `1.0.0`
+- golang 版本: `1.18.2`
 
 ## 安装
 从 Release 下载相应系统的可执行文件即可，无需安装。
@@ -43,6 +54,9 @@ go build .
 
 - `-l 字符串`
   - 语言 ( `en(英语,默认) | cn(简体中文)` )
+- `-p string`
+  - 指定要监听的地址和端口 (默认值: `127.0.0.1:1883` )
+  - 如需允许所有 IP 地址： `:1883`
 - `-c 字符串`
   - 只允许客户端 ID 为这些的客户端（使用 `,` 分隔）
 - `-t 字符串`
@@ -59,7 +73,9 @@ go build .
 ## 编译
 
 ```
-go get .
-go generate
+go get .     # 需要有互联网连接
+go generate  # 只有 Windows 需要执行这条
 go build .
 ```
+
+在 Windows 环境下编译所有平台版本: `build.bat`

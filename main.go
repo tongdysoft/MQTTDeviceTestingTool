@@ -33,6 +33,7 @@ var (
 
 func main() {
 	var (
+		listen       string
 		onlyID       string
 		onlyTopic    string
 		onlyPayload  string
@@ -46,6 +47,7 @@ func main() {
 	// 初始化启动参数
 	logPrint("i", lang("TITLE")+" v1.0.0")
 	flag.StringVar(&language, "l", "en", "Language ( en(default) | cn )")
+	flag.StringVar(&listen, "p", "127.0.0.1:1883", "Define listening on IP:Port (default: 127.0.0.1:1883 )")
 	flag.StringVar(&onlyID, "c", "", "Only allow these client IDs (comma separated)")
 	flag.StringVar(&onlyTopic, "t", "", "Only allow these topics (comma separated)")
 	flag.StringVar(&onlyPayload, "w", "", "Only allow these words in message content (comma separated)")
@@ -79,9 +81,9 @@ func main() {
 		done <- true
 	}()
 	// 初始化 MQTT 服务器
-	logPrint("i", lang("BOOTING"))
+	logPrint("i", lang("BOOTING")+listen+" ...")
 	server := mqtt.NewServer(nil)
-	tcp := listeners.NewTCP("t1", ":1883")
+	tcp := listeners.NewTCP(listen, listen)
 	err := server.AddListener(tcp, &listeners.Config{
 		Auth: new(auth.Allow),
 	})
@@ -114,7 +116,7 @@ func main() {
 	// 收到取消订阅请求
 	server.Events.OnUnsubscribe = func(filter string, cl events.Client) {
 		logFileStr(true, lang("SUBSCRIBED"), filter, "")
-		logPrint("U", fmt.Sprintf("%s %s %s %s)", lang("CLIENT"), cl.ID, lang("UNSUBSCRIBED"), filter))
+		logPrint("U", fmt.Sprintf("%s %s %s %s", lang("CLIENT"), cl.ID, lang("UNSUBSCRIBED"), filter))
 	}
 	// 收到消息
 	server.Events.OnMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {
