@@ -5,3 +5,9 @@ Thumbs.db
 *.txt
 *.csv
 *.syso
+*.xz
+*.7z
+*.cab
+mqtt-test-server
+MqttClientTestTool*
+tmp/go-link 000000.o
