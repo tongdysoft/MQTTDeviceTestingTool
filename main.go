@@ -29,6 +29,7 @@ var (
 	logFileF   *os.File
 	logDataF   *os.File
 	logStatusF *os.File
+	monochrome bool = false
 )
 
 func main() {
@@ -54,6 +55,7 @@ func main() {
 	flag.StringVar(&logData, "m", "", "Log message to csv file")
 	flag.StringVar(&logStatus, "s", "", "Log state changes to a csv file")
 	flag.StringVar(&logFile, "o", "", "Save log to txt/log file")
+	flag.BoolVar(&monochrome, "n", false, "monochrome")
 	flag.Parse()
 	// 初始化设置
 	if len(onlyID) > 0 {

@@ -56,6 +56,10 @@ func logPrint(iconChar string, text string) {
 		write.WriteString(log1)
 		write.Flush()
 	}
+	if monochrome {
+		fmt.Print(log0 + log1)
+		return
+	}
 	switch iconChar {
 	case "M": // 信息
 		fmt.Print(aurora.BgMagenta(log0))
