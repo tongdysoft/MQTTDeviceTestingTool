@@ -9,7 +9,7 @@ Download the program from Release. No installation required.
 
 ## Usage
 
-Command: mqtt-test-server `< -c .. | -d .. | -l .. | -o .. | -s .. | -t .. | -w .. >`
+Command: mqtt-test-server `< -l .. | -p .. | -c .. | -t .. | -w .. | -m .. | -s .. | -o .. >`
 
 - `-l string`
   - Language ( `en(default) | cn` )
@@ -28,6 +28,8 @@ Command: mqtt-test-server `< -c .. | -d .. | -l .. | -o .. | -s .. | -t .. | -w 
   - Log state changes to a csv file
 - `-o path-string`
   - Save log to txt/log file
+- `-n`
+  - Use a monochrome color scheme
 
 ## Build
 
@@ -38,6 +40,10 @@ go build .
 ```
 
 Build all platforms under Windows: `build.bat`
+
+## Screenshot
+
+![Screenshot](screenshot-en.png)
 
 # MQTT 客户端测试工具
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
@@ -50,7 +56,7 @@ Build all platforms under Windows: `build.bat`
 
 ## 使用说明
 
-命令行参数: mqtt-test-server `< -c .. | -d .. | -l .. | -o .. | -s .. | -t .. | -w .. >`
+命令行参数: mqtt-test-server `< -l .. | -p .. | -c .. | -t .. | -w .. | -m .. | -s .. | -o .. >`
 
 - `-l 字符串`
   - 语言 ( `en(英语,默认) | cn(简体中文)` )
@@ -69,6 +75,8 @@ Build all platforms under Windows: `build.bat`
   - 将客户端的连接、断开、订阅、退订等行为保存到某个 .csv 文件
 - `-o 文件路径字符串`
   - 将日志输出保存到某个 .txt / .log 文件
+- `-n`
+  - 使用单色模式输出，避免某些不支持彩色的终端输出乱码
 
 ## 编译
 
@@ -79,3 +87,7 @@ go build .
 ```
 
 在 Windows 环境下编译所有平台版本: `build.bat`
+
+## 截图
+
+![截图](screenshot-cn.png)
