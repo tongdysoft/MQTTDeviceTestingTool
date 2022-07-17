@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sort"
@@ -33,6 +35,7 @@ var (
 )
 
 func main() {
+	go http.ListenAndServe(":9999", nil)
 	var (
 		listen       string
 		onlyID       string
@@ -46,7 +49,7 @@ func main() {
 		onlyPayloadS []string = []string{}
 	)
 	// 初始化启动参数
-	logPrint("i", lang("TITLE")+" v1.0.0")
+	logPrint("i", lang("TITLE")+" v1.0.1")
 	flag.StringVar(&language, "l", "en", "Language ( en(default) | cn )")
 	flag.StringVar(&listen, "p", "127.0.0.1:1883", "Define listening on IP:Port (default: 127.0.0.1:1883 )")
 	flag.StringVar(&onlyID, "c", "", "Only allow these client IDs (comma separated)")
@@ -81,6 +84,7 @@ func main() {
 	go func() {
 		<-sigs
 		done <- true
+		close(sigs)
 	}()
 	// 初始化 MQTT 服务器
 	logPrint("i", lang("BOOTING")+listen+" ...")
@@ -123,12 +127,12 @@ func main() {
 	// 收到消息
 	server.Events.OnMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {
 		pkx = pk
-		var clID string = cl.ID
-		if onlyIdE && !in(onlyIdS, clID) {
+		var clID *string = &cl.ID
+		if onlyIdE && !in(&onlyIdS, clID) {
 			return
 		}
-		var topic string = pkx.TopicName
-		if onlyTopicE && !in(onlyTopicS, topic) {
+		var topic *string = &pkx.TopicName
+		if onlyTopicE && !in(&onlyTopicS, topic) {
 			return
 		}
 		var payload string = string(pkx.Payload)
@@ -144,14 +148,15 @@ func main() {
 				return
 			}
 		}
-		logFileStr(false, clID, topic, payload)
-		logPrint("M", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), clID, lang("TOPIC"), topic, lang("PAYLOAD"), payload))
+		logFileStr(false, *clID, *topic, payload)
+		logPrint("M", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), *clID, lang("TOPIC"), *topic, lang("PAYLOAD"), payload))
 		return pk, nil
 	}
 	// 启动完毕
 	logPrint("i", lang("BOOTOK"))
 	// 处理结束信号
 	<-done
+	close(done)
 	logPrint("X", lang("NEEDSTOP"))
 	server.Close()
 	if logFileE {
@@ -167,10 +172,10 @@ func main() {
 	os.Exit(0)
 }
 
-func in(strArr []string, str string) bool {
-	sort.Strings(strArr)
-	index := sort.SearchStrings(strArr, str)
-	if index < len(strArr) && strArr[index] == str {
+func in(strArr *[]string, str *string) bool {
+	sort.Strings(*strArr)
+	index := sort.SearchStrings(*strArr, *str)
+	if index < len(*strArr) && (*strArr)[index] == *str {
 		return true
 	}
 	return false
