@@ -37,6 +37,8 @@ var (
 func main() {
 	go http.ListenAndServe(":9999", nil)
 	var (
+		version      string = "1.1.0"
+		versionView  bool   = false
 		listen       string
 		onlyID       string
 		onlyTopic    string
@@ -49,7 +51,8 @@ func main() {
 		onlyPayloadS []string = []string{}
 	)
 	// 初始化启动参数
-	logPrint("i", lang("TITLE")+" v1.0.1")
+	logPrint("i", lang("TITLE")+" v"+version)
+	flag.BoolVar(&versionView, "v", false, "Print version info")
 	flag.StringVar(&language, "l", "en", "Language ( en(default) | cn )")
 	flag.StringVar(&listen, "p", "127.0.0.1:1883", "Define listening on IP:Port (default: 127.0.0.1:1883 )")
 	flag.StringVar(&onlyID, "c", "", "Only allow these client IDs (comma separated)")
@@ -58,9 +61,14 @@ func main() {
 	flag.StringVar(&logData, "m", "", "Log message to csv file")
 	flag.StringVar(&logStatus, "s", "", "Log state changes to a csv file")
 	flag.StringVar(&logFile, "o", "", "Save log to txt/log file")
-	flag.BoolVar(&monochrome, "n", false, "monochrome")
+	flag.BoolVar(&monochrome, "n", false, "Use a monochrome color scheme")
 	flag.Parse()
 	// 初始化设置
+	if versionView {
+		logPrint("i", "KagurazakaYashi@Tongdy, 2022")
+		logPrint("i", "https://github.com/tongdysoft/mqtt-test-server")
+		return
+	}
 	if len(onlyID) > 0 {
 		onlyIdS = strings.Split(onlyID, ",")
 		logPrint("C", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("CLIENT"), onlyIdS))

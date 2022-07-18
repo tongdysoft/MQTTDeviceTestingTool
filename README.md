@@ -30,6 +30,8 @@ Command: mqtt-test-server `< -l .. | -p .. | -c .. | -t .. | -w .. | -m .. | -s 
   - Save log to txt/log file
 - `-n`
   - Use a monochrome color scheme
+- `-v`
+  - Print version info
 
 ## Build
 
@@ -77,6 +79,8 @@ Build all platforms under Windows: `build.bat`
   - 将日志输出保存到某个 .txt / .log 文件
 - `-n`
   - 使用单色模式输出，避免某些不支持彩色的终端输出乱码
+- `-v`
+  - 显示版本号等信息并退出
 
 ## 编译
 

@@ -1,4 +1,4 @@
-SET name=bin\MqttClientTestTool_v1.0.0_
+SET name=bin\MqttClientTestTool_v1.1.0_
 DEL /Q bin\*
 SET CGO_ENABLED=0
 SET GOARCH=amd64
