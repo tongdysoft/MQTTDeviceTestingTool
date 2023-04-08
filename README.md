@@ -1,10 +1,13 @@
 # MQTT client test tool
-This tool can help you test the stability of your device's MQTT connection.
 
-- version: `1.0.0`
-- golang version: `1.18.2`
+This tool can help you test the stability of your device's MQTT connection. [Github](https://github.com/tongdysoft/mqtt-test-server)
+
+- version: `1.1.0`
+- golang version (main): `1.20.4`
+- golang version (release): `1.18.2`
 
 ## Install
+
 Download the program from Release. No installation required.
 
 ## Usage
@@ -47,13 +50,20 @@ Build all platforms under Windows: `build.bat`
 
 ![Screenshot](screenshot-en.png)
 
+## LICENSE
+
+Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under Mulan PSL v2. You can use this software according to the terms and conditions of the Mulan PSL v2. You may obtain a copy of Mulan PSL v2 at: http://license.coscl.org.cn/MulanPSL2 THIS SOFTWARE IS PROVIDED ON AN “AS IS” BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the Mulan PSL v2 for more details.
+
 # MQTT 客户端测试工具
+
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
-- 版本: `1.0.0`
-- golang 版本: `1.18.2`
+- 版本: `1.1.0`
+- golang 版本 (主线): `1.20.4`
+- golang 版本 (最新编译): `1.18.2`
 
 ## 安装
+
 从 Release 下载相应系统的可执行文件即可，无需安装。
 
 ## 使用说明
@@ -82,6 +92,8 @@ Build all platforms under Windows: `build.bat`
 - `-v`
   - 显示版本号等信息并退出
 
+可以将 `中文交互模式.bat` 和 exe 放在一起，双击启动交互模式，无需关心命令行参数书写。
+
 ## 编译
 
 ```
@@ -95,3 +107,8 @@ go build .
 ## 截图
 
 ![截图](screenshot-cn.png)
+
+## 许可
+
+Copyright (c) 2022 神楽坂雅詩@Tongdy MQTT 客户端测试工具。
+您对“软件”的复制、使用、修改及分发受木兰宽松许可证，第2版的条款的约束。
