@@ -22,6 +22,9 @@ var langs map[string][]string = map[string][]string{
 	"LOGDATA":      {"data log file", "数据记录文件"},
 	"LOGSTAT":      {"status log file", "状态记录文件"},
 	"LOGFAIL":      {"Unable to write to", "无法写入"},
+	"CACERT":       {"CA certificate", "CA 证书"},
+	"FAIL":         {"failed", "失败"},
+	"ERROR":        {" error", "错误"},
 }
 
 func lang(title string) string {

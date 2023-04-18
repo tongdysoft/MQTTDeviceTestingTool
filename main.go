@@ -2,6 +2,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"log"
@@ -49,6 +51,7 @@ func main() {
 		onlyIdS      []string = []string{}
 		onlyTopicS   []string = []string{}
 		onlyPayloadS []string = []string{}
+		certCA       string
 	)
 	// 初始化启动参数
 	logPrint("i", lang("TITLE")+" v"+version)
@@ -62,6 +65,7 @@ func main() {
 	flag.StringVar(&logStatus, "s", "", "Log state changes to a csv file")
 	flag.StringVar(&logFile, "o", "", "Save log to txt/log file")
 	flag.BoolVar(&monochrome, "n", false, "Use a monochrome color scheme")
+	flag.StringVar(&certCA, "ca", "", "CA certificate file path")
 	flag.Parse()
 	// 初始化设置
 	if versionView {
@@ -94,12 +98,34 @@ func main() {
 		done <- true
 		close(sigs)
 	}()
+	// 加载 SSL 证书
+	tlsConfig := &tls.Config{}
+	certPool := x509.NewCertPool()
+	if len(certCA) > 0 {
+		contentC, err := os.ReadFile(certCA)
+		if err != nil {
+			logPrint("X", fmt.Sprintf("%s%s: %s: %s)", lang("CACERT"), lang("ERROR"), certCA, err.Error()))
+			return
+		}
+		var isok bool = certPool.AppendCertsFromPEM(contentC)
+		if !isok {
+			logPrint("X", fmt.Sprintf("%s%s: %s (%d)", lang("CACERT"), lang("ERROR"), certCA, len(contentC)))
+			return
+		}
+		tlsConfig = &tls.Config{
+			ClientCAs:  certPool,
+			ClientAuth: tls.RequireAndVerifyClientCert,
+		}
+		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("CACERT"), certCA, len(contentC)))
+	}
 	// 初始化 MQTT 服务器
 	logPrint("i", lang("BOOTING")+listen+" ...")
 	server := mqtt.NewServer(nil)
 	tcp := listeners.NewTCP(listen, listen)
-	err := server.AddListener(tcp, &listeners.Config{
-		Auth: new(auth.Allow),
+	err := error(nil)
+	err = server.AddListener(tcp, &listeners.Config{
+		Auth:      new(auth.Allow),
+		TLSConfig: tlsConfig,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -108,10 +134,17 @@ func main() {
 	go func() {
 		err := server.Serve()
 		if err != nil {
-			logPrint("X", lang("SERVERFAIL"))
+			logPrint("E", lang("SERVERFAIL"))
 			log.Fatal(err)
 		}
 	}()
+	// server.Events.OnProcessMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {
+	// 	return pkx, err
+	// }
+	// 设备连接出错
+	server.Events.OnError = func(cl events.Client, err error) {
+		logPrint("E", fmt.Sprintf("%s %s: %v", lang("CLIENT"), cl.ID, err))
+	}
 	// 有设备连接到服务器
 	server.Events.OnConnect = func(cl events.Client, pk events.Packet) {
 		logFileStr(true, lang("CONNECT"), cl.ID, strings.ReplaceAll(fmt.Sprint(pk), "\n", ""))

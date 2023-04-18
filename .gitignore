@@ -12,3 +12,6 @@ bin/*
 *.cab
 mqtt-test-server
 MqttClientTestTool*
+*.pem
+*.crt
+*.key
