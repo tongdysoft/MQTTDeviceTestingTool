@@ -23,6 +23,10 @@ var langs map[string][]string = map[string][]string{
 	"LOGSTAT":      {"status log file", "状态记录文件"},
 	"LOGFAIL":      {"Unable to write to", "无法写入"},
 	"CACERT":       {"CA certificate", "CA 证书"},
+	"SERVERCERT":   {"server certificate", "服务器证书"},
+	"SERVERKEY":    {"server key", "服务器私钥"},
+	"SERVERKEYPWD": {"server key password", "服务器私钥的密码"},
+	"NOTEMPTY":     {"can not be empty", "不能为空"},
 	"FAIL":         {"failed", "失败"},
 	"ERROR":        {" error", "错误"},
 }

@@ -52,6 +52,9 @@ func main() {
 		onlyTopicS   []string = []string{}
 		onlyPayloadS []string = []string{}
 		certCA       string
+		certCert     string
+		certKey      string
+		certPassword string
 	)
 	// 初始化启动参数
 	logPrint("i", lang("TITLE")+" v"+version)
@@ -66,6 +69,9 @@ func main() {
 	flag.StringVar(&logFile, "o", "", "Save log to txt/log file")
 	flag.BoolVar(&monochrome, "n", false, "Use a monochrome color scheme")
 	flag.StringVar(&certCA, "ca", "", "CA certificate file path")
+	flag.StringVar(&certCert, "ce", "", "Server certificate file path")
+	flag.StringVar(&certKey, "ck", "", "Server key file path")
+	flag.StringVar(&certPassword, "cp", "", "Server key file password")
 	flag.Parse()
 	// 初始化设置
 	if versionView {
@@ -101,6 +107,7 @@ func main() {
 	// 加载 SSL 证书
 	tlsConfig := &tls.Config{}
 	certPool := x509.NewCertPool()
+	var useTLS bool = false
 	if len(certCA) > 0 {
 		contentC, err := os.ReadFile(certCA)
 		if err != nil {
@@ -117,16 +124,64 @@ func main() {
 			ClientAuth: tls.RequireAndVerifyClientCert,
 		}
 		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("CACERT"), certCA, len(contentC)))
+		useTLS = true
+	}
+	if len(certCert) > 0 && len(certKey) == 0 {
+		logPrint("X", fmt.Sprintf("%s%s: %s", lang("SERVERKEY"), lang("ERROR"), lang("NOTEMPTY")))
+		return
+	}
+	if len(certCert) == 0 && len(certKey) > 0 {
+		logPrint("X", fmt.Sprintf("%s%s: %s", lang("SERVERCERT"), lang("ERROR"), lang("NOTEMPTY")))
+		return
+	}
+	if len(certCert) > 0 && len(certKey) > 0 {
+		contentC, err := os.ReadFile(certCert)
+		if err != nil {
+			logPrint("X", fmt.Sprintf("%s%s: %s: %s", lang("SERVERCERT"), lang("ERROR"), certCert, err.Error()))
+			return
+		}
+		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("SERVERCERT"), certCert, len(contentC)))
+		contentK, err := os.ReadFile(certKey)
+		if err != nil {
+			logPrint("X", fmt.Sprintf("%s%s: %s: %s", lang("SERVERKEY"), lang("ERROR"), certKey, err.Error()))
+			return
+		}
+		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("SERVERKEY"), certKey, len(contentK)))
+		cert, err := tls.X509KeyPair(contentC, contentK)
+		if err != nil {
+			logPrint("X", fmt.Sprintf("%s%s: %s", lang("SERVERCERT"), lang("ERROR"), err.Error()))
+			return
+		}
+		if len(certCA) > 0 {
+			tlsConfig = &tls.Config{
+				ClientCAs:    certPool,
+				Certificates: []tls.Certificate{cert},
+			}
+		} else {
+			tlsConfig = &tls.Config{
+				Certificates: []tls.Certificate{cert},
+			}
+		}
+		useTLS = true
+	}
+	if len(certPassword) > 0 {
+		logPrint("C", fmt.Sprintf("%s: (%d)", lang("SERVERKEYPWD"), len(certPassword)))
 	}
 	// 初始化 MQTT 服务器
 	logPrint("i", lang("BOOTING")+listen+" ...")
 	server := mqtt.NewServer(nil)
 	tcp := listeners.NewTCP(listen, listen)
 	err := error(nil)
-	err = server.AddListener(tcp, &listeners.Config{
-		Auth:      new(auth.Allow),
-		TLSConfig: tlsConfig,
-	})
+	if useTLS {
+		err = server.AddListener(tcp, &listeners.Config{
+			Auth:      new(auth.Allow),
+			TLSConfig: tlsConfig,
+		})
+	} else {
+		err = server.AddListener(tcp, &listeners.Config{
+			Auth: new(auth.Allow),
+		})
+	}
 	if err != nil {
 		log.Fatal(err)
 	}

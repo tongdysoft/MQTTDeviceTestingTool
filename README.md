@@ -19,6 +19,14 @@ Command: mqtt-test-server `< -l .. | -p .. | -c .. | -t .. | -w .. | -m .. | -s 
 - `-p string`
   - Define listening on IP:Port (default: `127.0.0.1:1883` )
   - To allow all IP addresses: `:1883`
+- `-ca string`
+  - CA certificate file path
+- `-ce string`
+  - Server certificate file path
+- `-ck string`
+  - Server key file path
+- `-cp string`
+  - Server key file password
 - `-c string`
   - Only allow these client IDs ( `,` separated)
 - `-t string`
@@ -72,9 +80,17 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 
 - `-l 字符串`
   - 语言 ( `en(英语,默认) | cn(简体中文)` )
-- `-p string`
+- `-p 字符串`
   - 指定要监听的地址和端口 (默认值: `127.0.0.1:1883` )
   - 如需允许所有 IP 地址： `:1883`
+- `-ca string`
+  - CA 证书文件路径
+- `-ce string`
+  - 服务器证书文件路径
+- `-ck string`
+  - 服务器私钥文件路径
+- `-cp string`
+  - 服务器私钥文件的密码
 - `-c 字符串`
   - 只允许客户端 ID 为这些的客户端（使用 `,` 分隔）
 - `-t 字符串`
