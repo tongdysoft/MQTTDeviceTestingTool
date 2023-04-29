@@ -39,7 +39,7 @@ var (
 func main() {
 	go http.ListenAndServe(":9999", nil)
 	var (
-		version      string = "1.1.0"
+		version      string = "1.2.0"
 		versionView  bool   = false
 		listen       string
 		onlyID       string
@@ -147,9 +147,8 @@ func main() {
 			return
 		}
 		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("SERVERKEY"), certKey, len(contentK)))
-		cert, err := tls.X509KeyPair(contentC, contentK)
-		if err != nil {
-			logPrint("X", fmt.Sprintf("%s%s: %s", lang("SERVERCERT"), lang("ERROR"), err.Error()))
+		var cert tls.Certificate = LoadCert(contentC, contentK, certPassword)
+		if cert.Certificate == nil {
 			return
 		}
 		if len(certCA) > 0 {
