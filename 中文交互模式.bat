@@ -1,4 +1,4 @@
-REM charset: GB2312, line break: CRLF, version: 1.1.0
+REM charset: GB2312, line break: CRLF, version: 1.2.0
 SET vl=cn
 SET vip=0.0.0.0
 SET vpo=1883
@@ -8,6 +8,10 @@ SET vw=
 SET vm=
 SET vs=
 SET vo=
+SET ca=
+SET ce=
+SET ck=
+SET cp=
 SET vn=YES
 
 :START
@@ -22,16 +26,20 @@ ECHO 程序将创建一个 MQTT 服务器，
 ECHO 在创建完成后，可将设备接入进来进行监控。
 ECHO 请输入编号以修改 MQTT 服务器对应的参数。
 ECHO --------------------------------------------------
-ECHO [0] 信息输出使用的语言: %vl%
-ECHO [1] MQTT 服务器 IP 地址: %vip%
-ECHO [2] MQTT 服务器 端口号: %vpo%
-ECHO [3] 只允许客户端 ID 为这些的客户端: %vc%
-ECHO [4] 只接收这些主题的信息: %vt%
-ECHO [5] 只有消息内容包含这些关键词才会处理: %vw%
-ECHO [6] 将收取到的消息保存到 .csv 文件路径: %vm%
-ECHO [7] 将客户端状态变化保存到 .csv 文件路径: %vs%
-ECHO [8] 将日志输出保存到 .log 文件路径: %vo%
-ECHO [9] 单色模式输出(非普通 cmd 建议关闭): %vn%
+ECHO [ 0] 信息输出使用的语言: %vl%
+ECHO [ 1] MQTT 服务器 IP 地址: %vip%
+ECHO [ 2] MQTT 服务器 端口号: %vpo%
+ECHO [ 3] CA 证书文件路径: %ca%
+ECHO [ 4] 自签名证书文件路径: %ce%
+ECHO [ 5] 自签名私钥文件路径: %ck%
+ECHO [ 6] 自签名私钥文件的密码: %cp%
+ECHO [ 7] 只允许客户端 ID 为这些的客户端: %vc%
+ECHO [ 8] 只接收这些主题的信息: %vt%
+ECHO [ 9] 只有消息内容包含这些关键词才会处理: %vw%
+ECHO [10] 将收取到的消息保存到 .csv 文件路径: %vm%
+ECHO [11] 将客户端状态变化保存到 .csv 文件路径: %vs%
+ECHO [12] 将日志输出保存到 .log 文件路径: %vo%
+ECHO [13] 单色模式输出(非普通 cmd 建议关闭): %vn%
 ECHO --------------------------------------------------
 ECHO [Y] 启动 MQTT 服务器
 ECHO [N] 退出
@@ -41,13 +49,17 @@ SET /P v=请输入编号:
 IF "%v%" EQU "0" GOTO SET_VL
 IF "%v%" EQU "1" GOTO SET_VIP
 IF "%v%" EQU "2" GOTO SET_VPO
-IF "%v%" EQU "3" GOTO SET_VC
-IF "%v%" EQU "4" GOTO SET_VT
-IF "%v%" EQU "5" GOTO SET_VW
-IF "%v%" EQU "6" GOTO SET_VM
-IF "%v%" EQU "7" GOTO SET_VS
-IF "%v%" EQU "8" GOTO SET_VO
-IF "%v%" EQU "9" GOTO SET_VN
+IF "%v%" EQU "3" GOTO SET_CA
+IF "%v%" EQU "4" GOTO SET_CE
+IF "%v%" EQU "5" GOTO SET_CK
+IF "%v%" EQU "6" GOTO SET_CP
+IF "%v%" EQU "7" GOTO SET_VC
+IF "%v%" EQU "8" GOTO SET_VT
+IF "%v%" EQU "9" GOTO SET_VW
+IF "%v%" EQU "10" GOTO SET_VM
+IF "%v%" EQU "11" GOTO SET_VS
+IF "%v%" EQU "12" GOTO SET_VO
+IF "%v%" EQU "13" GOTO SET_VN
 IF "%v%" EQU "Y" GOTO RUN
 IF "%v%" EQU "y" GOTO RUN
 IF "%v%" EQU "N" GOTO PEND
@@ -93,6 +105,34 @@ ECHO 当前值: %vpo%
 ECHO 请输入端口:
 SET /P vpo=端口号（数字）: 
 IF "%vpo%" EQU "" SET vpo=1883
+GOTO START
+
+:SET_CA
+CLS
+ECHO 当前值: %ca%
+ECHO CA 证书文件路径:
+SET /P ca=文件路径 (.pem/.crt): 
+GOTO START
+
+:SET_CE
+CLS
+ECHO 当前值: %ce%
+ECHO 自签名证书文件路径:
+SET /P ce=文件路径 (.pem/.crt): 
+GOTO START
+
+:SET_CK
+CLS
+ECHO 当前值: %ck%
+ECHO 自签名私钥文件路径:
+SET /P ck=文件路径 (.key): 
+GOTO START
+
+:SET_CP
+CLS
+ECHO 当前值: %cp%
+ECHO 自签名私钥文件的密码:
+SET /P cp=密码: 
 GOTO START
 
 :SET_VC
@@ -158,9 +198,13 @@ ECHO 正在启动...
 ECHO 按 Ctrl+C 可退出程序。
 SET el= -l "%vl%"
 SET ip= -p "%vip%:%vpo%"
-IF "%vc%" NEQ "" SET ec= -c "%vc%".
+IF "%vc%" NEQ "" SET ec= -c "%vc%"
 IF "%vt%" NEQ "" SET et= -t "%vt%"
 IF "%vw%" NEQ "" SET ew= -w "%vw%"
+IF "%ca%" NEQ "" SET eca= -ca "%ca%"
+IF "%ce%" NEQ "" SET ece= -ce "%ce%"
+IF "%ck%" NEQ "" SET eck= -ck "%ck%"
+IF "%cp%" NEQ "" SET ecp= -cp "%cp%"
 IF "%vm%" NEQ "" SET em= -m "%vm%"
 IF "%vs%" NEQ "" SET es= -s "%vs%"
 IF "%vo%" NEQ "" SET eo= -o "%vo%"
@@ -169,8 +213,9 @@ IF "%vn%" EQU "YES" SET en= -n
 SET px=32
 if "%PROCESSOR_ARCHITECTURE%"=="AMD64" SET px=64
 TITLE MQTT 客户端测试工具 - %vip%:%vpo%
+ECHO 下次以同样配置启动时，可以直接保存并使用以下命令启动：
 ECHO ON
-MqttClientTestTool_v1.1.0_Windows%px%.exe%el%%ip%%ec%%et%%ew%%em%%es%%eo%%en%
+MqttClientTestTool_v1.1.0_Windows%px%.exe%el%%ip%%eca%%ece%%eck%%ecp%%ec%%et%%ew%%em%%es%%eo%%en%
 GOTO START
 
 :PEND
