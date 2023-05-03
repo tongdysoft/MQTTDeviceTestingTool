@@ -2,7 +2,7 @@
 
 This tool can help you test the stability of your device's MQTT connection. [Github](https://github.com/tongdysoft/mqtt-test-server)
 
-- version: `1.1.0`
+- version: `1.2.0`
 - golang version (main): `1.20.4`
 - golang version (release): `1.18.2`
 
@@ -76,7 +76,7 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
-- 版本: `1.1.0`
+- 版本: `1.2.0`
 - golang 版本 (主线): `1.20.4`
 - golang 版本 (最新编译): `1.18.2`
 
@@ -93,13 +93,13 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 - `-p 字符串`
   - 指定要监听的地址和端口 (默认值: `127.0.0.1:1883` )
   - 如需允许所有 IP 地址： `:1883`
-- `-ca string`
+- `-ca 文件路径字符串`
   - CA 证书文件路径
-- `-ce string`
+- `-ce 文件路径字符串`
   - 服务器证书文件路径
-- `-ck string`
+- `-ck 文件路径字符串`
   - 服务器私钥文件路径
-- `-cp string`
+- `-cp 字符串`
   - 服务器私钥文件的密码
 - `-c 字符串`
   - 只允许客户端 ID 为这些的客户端（使用 `,` 分隔）

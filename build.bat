@@ -1,6 +1,6 @@
-SET name=MqttClientTestTool_v1.1.0_
+SET name=MqttClientTestTool_v1.2.0_
 DEL /Q bin\*
-COPY 中文交互模式.bat bin\
+COPY InteractiveMode*.bat bin\
 COPY README.md bin\
 COPY rc.icns bin\app.icns
 SET CGO_ENABLED=0
@@ -22,7 +22,7 @@ SET GOOS=linux
 go build -o bin\%name%Linux32 .
 @REM xz -z -e -9 -T 0 -v bin/*
 cd bin
-7z a -mx9 -tzip %name%Windows.zip %name%Windows* 中文交互模式.bat README.md
+7z a -mx9 -tzip %name%Windows.zip %name%Windows* InteractiveMode*.bat README.md
 7z a -mx9 -tzip %name%Linux.zip %name%Linux* README.md
 7z a -mx9 -tzip %name%macOS.zip %name%macOS* README.md app.icns
 DEL /Q *32
