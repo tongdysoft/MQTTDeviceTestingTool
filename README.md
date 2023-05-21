@@ -1,10 +1,13 @@
+![icon](rc.ico)
+
 # MQTT client test tool
+
+[ English | [中文](#MQTT%20%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%B5%8B%E8%AF%95%E5%B7%A5%E5%85%B7) ]
 
 This tool can help you test the stability of your device's MQTT connection. [Github](https://github.com/tongdysoft/mqtt-test-server)
 
-- version: `1.2.0`
-- golang version (main): `1.20.4`
-- golang version (release): `1.18.2`
+- version: `1.3.0`
+- golang version: `1.20.4`
 
 ## Install
 
@@ -12,18 +15,20 @@ Download the program from Release. No installation required.
 
 ## Usage
 
-Command: mqtt-test-server `< -l .. | -p .. | -c .. | -t .. | -w .. | -m .. | -s .. | -o .. >`
+Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -n | -v >`
 
 - `-l string`
   - Language ( `en(default) | cn` )
 - `-p string`
   - Define listening on IP:Port (default: `127.0.0.1:1883` )
   - To allow all IP addresses: `:1883`
-- `-ca string`
+- `-u path-string`
+  - Users and permissions file path
+- `-ca path-string`
   - CA certificate file path
-- `-ce string`
+- `-ce path-string`
   - Server certificate file path
-- `-ck string`
+- `-ck path-string`
   - Server key file path
 - `-cp string`
   - Server key file password
@@ -44,9 +49,26 @@ Command: mqtt-test-server `< -l .. | -p .. | -c .. | -t .. | -w .. | -m .. | -s 
 - `-v`
   - Print version info
 
+## Users and permissions file DEMO
+
+```json
+{
+  "Users": {
+    "u1":"u1",
+    "u2":"u2",
+    "u3":"u3"
+  },
+  "AllowedTopics": {
+    "u1": ["u1"],
+    "u2": ["u2"],
+    "u3": ["u3"]
+  }
+}
+```
+
 ## Build
 
-```
+```sh
 go get .     # Need internet
 go generate  # Windows only
 go build .
@@ -71,14 +93,12 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 - josephspurrier/goversioninfo ([MIT License](https://github.com/josephspurrier/goversioninfo/blob/master/LICENSE))
 - rs/xid ([MIT License](https://github.com/rs/xid/blob/master/LICENSE))
 
-
 # MQTT 客户端测试工具
 
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
-- 版本: `1.2.0`
-- golang 版本 (主线): `1.20.4`
-- golang 版本 (最新编译): `1.18.2`
+- 版本: `1.3.0`
+- golang 版本: `1.20.4`
 
 ## 安装
 
@@ -86,13 +106,15 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 
 ## 使用说明
 
-命令行参数: mqtt-test-server `< -l .. | -p .. | -c .. | -t .. | -w .. | -m .. | -s .. | -o .. >`
+命令行参数: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -n | -v >`
 
 - `-l 字符串`
   - 语言 ( `en(英语,默认) | cn(简体中文)` )
 - `-p 字符串`
   - 指定要监听的地址和端口 (默认值: `127.0.0.1:1883` )
   - 如需允许所有 IP 地址： `:1883`
+- `-u 文件路径字符串`
+  - 用户和主题权限配置文件路径
 - `-ca 文件路径字符串`
   - CA 证书文件路径
 - `-ce 文件路径字符串`
@@ -120,9 +142,26 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 
 可以将 `中文交互模式.bat` 和 exe 放在一起，双击启动交互模式，无需关心命令行参数书写。
 
+### 用户和主题权限配置文件示例
+
+```json
+{
+  "Users": {
+    "u1":"u1",
+    "u2":"u2",
+    "u3":"u3"
+  },
+  "AllowedTopics": {
+    "u1": ["u1"],
+    "u2": ["u2"],
+    "u3": ["u3"]
+  }
+}
+```
+
 ## 编译
 
-```
+```sh
 go get .     # 需要有互联网连接
 go generate  # 只有 Windows 需要执行这条
 go build .

@@ -1,4 +1,4 @@
-SET name=MqttClientTestTool_v1.2.0_
+SET name=MqttClientTestTool_v1.3.0_
 DEL /Q bin\*
 COPY InteractiveMode*.bat bin\
 COPY README.md bin\

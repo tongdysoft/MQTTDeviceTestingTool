@@ -31,6 +31,11 @@ var langs map[string][]string = map[string][]string{
 	"ERROR":           {" error", "错误"},
 	"DECRYPT":         {"Decrypt", "解密"},
 	"ParsePrivateKey": {"Failed to parse the private key, the password is incorrect? ", "解析私钥失败，密码不正确？ "},
+	"READFAIL":        {"Failed to read", "未能读取"},
+	"USERDATABASE":    {"user database", "用户数据库"},
+	"LOADED":          {"Loaded", "已加载"},
+	"USERDB":          {"user data", "用户数据库"},
+	"PERMDB":          {"permissions data", "权限数据库"},
 }
 
 func lang(title string) string {

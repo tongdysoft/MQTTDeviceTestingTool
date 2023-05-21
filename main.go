@@ -25,6 +25,7 @@ var (
 	language   string
 	timeFormat string = "2006-01-02 15:04:05"
 	logFile    string
+	userFile   string
 	logData    string
 	logStatus  string
 	logFileE   bool = false
@@ -39,7 +40,7 @@ var (
 func main() {
 	go http.ListenAndServe(":9999", nil)
 	var (
-		version      string = "1.2.0"
+		version      string = "1.3.0"
 		versionView  bool   = false
 		listen       string
 		onlyID       string
@@ -68,6 +69,7 @@ func main() {
 	flag.StringVar(&logStatus, "s", "", "Log state changes to a csv file")
 	flag.StringVar(&logFile, "o", "", "Save log to txt/log file")
 	flag.BoolVar(&monochrome, "n", false, "Use a monochrome color scheme")
+	flag.StringVar(&userFile, "u", "", "Users and permissions file path")
 	flag.StringVar(&certCA, "ca", "", "CA certificate file path")
 	flag.StringVar(&certCert, "ce", "", "Server certificate file path")
 	flag.StringVar(&certKey, "ck", "", "Server key file path")
@@ -171,16 +173,31 @@ func main() {
 	server := mqtt.NewServer(nil)
 	tcp := listeners.NewTCP(listen, listen)
 	err := error(nil)
+	var conf listeners.Config = listeners.Config{}
 	if useTLS {
-		err = server.AddListener(tcp, &listeners.Config{
-			Auth:      new(auth.Allow),
-			TLSConfig: tlsConfig,
-		})
+		if len(userFile) > 0 {
+			conf = listeners.Config{
+				Auth:      loadUserAuthFile(userFile),
+				TLSConfig: tlsConfig,
+			}
+		} else {
+			conf = listeners.Config{
+				Auth:      new(auth.Allow),
+				TLSConfig: tlsConfig,
+			}
+		}
 	} else {
-		err = server.AddListener(tcp, &listeners.Config{
-			Auth: new(auth.Allow),
-		})
+		if len(userFile) > 0 {
+			conf = listeners.Config{
+				Auth: loadUserAuthFile(userFile),
+			}
+		} else {
+			conf = listeners.Config{
+				Auth: new(auth.Allow),
+			}
+		}
 	}
+	err = server.AddListener(tcp, &conf)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -188,7 +205,7 @@ func main() {
 	go func() {
 		err := server.Serve()
 		if err != nil {
-			logPrint("E", lang("SERVERFAIL"))
+			logPrint("X", lang("SERVERFAIL"))
 			log.Fatal(err)
 		}
 	}()
@@ -197,7 +214,7 @@ func main() {
 	// }
 	// 设备连接出错
 	server.Events.OnError = func(cl events.Client, err error) {
-		logPrint("E", fmt.Sprintf("%s %s: %v", lang("CLIENT"), cl.ID, err))
+		logPrint("D", fmt.Sprintf("%s %s: %v", lang("CLIENT"), cl.ID, err))
 	}
 	// 有设备连接到服务器
 	server.Events.OnConnect = func(cl events.Client, pk events.Packet) {

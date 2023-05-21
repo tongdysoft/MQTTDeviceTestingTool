@@ -1,7 +1,8 @@
-REM charset: GB2312, line break: CRLF, version: 1.2.0
+REM charset: GB2312, line break: CRLF, version: 1.3.0
 SET vl=cn
 SET vip=0.0.0.0
 SET vpo=1883
+SET vu=
 SET vc=
 SET vt=
 SET vw=
@@ -29,17 +30,18 @@ ECHO --------------------------------------------------
 ECHO [ 0] 信息输出使用的语言: %vl%
 ECHO [ 1] MQTT 服务器 IP 地址: %vip%
 ECHO [ 2] MQTT 服务器 端口号: %vpo%
-ECHO [ 3] CA 证书文件路径: %ca%
-ECHO [ 4] 自签名证书文件路径: %ce%
-ECHO [ 5] 自签名私钥文件路径: %ck%
-ECHO [ 6] 自签名私钥文件的密码: %cp%
-ECHO [ 7] 只允许客户端 ID 为这些的客户端: %vc%
-ECHO [ 8] 只接收这些主题的信息: %vt%
-ECHO [ 9] 只有消息内容包含这些关键词才会处理: %vw%
-ECHO [10] 将收取到的消息保存到 .csv 文件路径: %vm%
-ECHO [11] 将客户端状态变化保存到 .csv 文件路径: %vs%
-ECHO [12] 将日志输出保存到 .log 文件路径: %vo%
-ECHO [13] 单色模式输出(非普通 cmd 建议关闭): %vn%
+ECHO [ 3] 用户和主题权限配置文件路径: %vu%
+ECHO [ 4] CA 证书文件路径: %ca%
+ECHO [ 5] 自签名证书文件路径: %ce%
+ECHO [ 6] 自签名私钥文件路径: %ck%
+ECHO [ 7] 自签名私钥文件的密码: %cp%
+ECHO [ 8] 只允许客户端 ID 为这些的客户端: %vc%
+ECHO [ 9] 只接收这些主题的信息: %vt%
+ECHO [10] 只有消息内容包含这些关键词才会处理: %vw%
+ECHO [11] 将收取到的消息保存到 .csv 文件路径: %vm%
+ECHO [12] 将客户端状态变化保存到 .csv 文件路径: %vs%
+ECHO [13] 将日志输出保存到 .log 文件路径: %vo%
+ECHO [14] 单色模式输出(非普通 cmd 建议关闭): %vn%
 ECHO --------------------------------------------------
 ECHO [Y] 启动 MQTT 服务器
 ECHO [N] 退出
@@ -49,17 +51,18 @@ SET /P v=请输入编号:
 IF "%v%" EQU "0" GOTO SET_VL
 IF "%v%" EQU "1" GOTO SET_VIP
 IF "%v%" EQU "2" GOTO SET_VPO
-IF "%v%" EQU "3" GOTO SET_CA
-IF "%v%" EQU "4" GOTO SET_CE
-IF "%v%" EQU "5" GOTO SET_CK
-IF "%v%" EQU "6" GOTO SET_CP
-IF "%v%" EQU "7" GOTO SET_VC
-IF "%v%" EQU "8" GOTO SET_VT
-IF "%v%" EQU "9" GOTO SET_VW
-IF "%v%" EQU "10" GOTO SET_VM
-IF "%v%" EQU "11" GOTO SET_VS
-IF "%v%" EQU "12" GOTO SET_VO
-IF "%v%" EQU "13" GOTO SET_VN
+IF "%v%" EQU "3" GOTO SET_VU
+IF "%v%" EQU "4" GOTO SET_CA
+IF "%v%" EQU "5" GOTO SET_CE
+IF "%v%" EQU "6" GOTO SET_CK
+IF "%v%" EQU "7" GOTO SET_CP
+IF "%v%" EQU "8" GOTO SET_VC
+IF "%v%" EQU "9" GOTO SET_VT
+IF "%v%" EQU "10" GOTO SET_VW
+IF "%v%" EQU "11" GOTO SET_VM
+IF "%v%" EQU "12" GOTO SET_VS
+IF "%v%" EQU "13" GOTO SET_VO
+IF "%v%" EQU "14" GOTO SET_VN
 IF "%v%" EQU "Y" GOTO RUN
 IF "%v%" EQU "y" GOTO RUN
 IF "%v%" EQU "N" GOTO PEND
@@ -105,6 +108,13 @@ ECHO 当前值: %vpo%
 ECHO 请输入端口:
 SET /P vpo=端口号（数字）: 
 IF "%vpo%" EQU "" SET vpo=1883
+GOTO START
+
+:SET_VU
+CLS
+ECHO 当前值: %vu%
+ECHO 用户和主题权限配置文件路径:
+SET /P vu=文件路径 (.json):
 GOTO START
 
 :SET_CA
