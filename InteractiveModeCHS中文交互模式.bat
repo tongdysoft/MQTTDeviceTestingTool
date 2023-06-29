@@ -1,4 +1,4 @@
-REM charset: GB2312, line break: CRLF, version: 1.3.0
+REM charset: GB2312, line break: CRLF, version: 1.3.1
 SET vl=cn
 SET vip=0.0.0.0
 SET vpo=1883
@@ -44,6 +44,7 @@ ECHO [13] 将日志输出保存到 .log 文件路径: %vo%
 ECHO [14] 单色模式输出(非普通 cmd 建议关闭): %vn%
 ECHO --------------------------------------------------
 ECHO [Y] 启动 MQTT 服务器
+ECHO [H] 获取帮助
 ECHO [N] 退出
 ECHO ==================================================
 SET /P v=请输入编号: 
@@ -65,6 +66,8 @@ IF "%v%" EQU "13" GOTO SET_VO
 IF "%v%" EQU "14" GOTO SET_VN
 IF "%v%" EQU "Y" GOTO RUN
 IF "%v%" EQU "y" GOTO RUN
+IF "%v%" EQU "H" GOTO HELP
+IF "%v%" EQU "h" GOTO HELP
 IF "%v%" EQU "N" GOTO PEND
 IF "%v%" EQU "n" GOTO PEND
 GOTO START
@@ -225,7 +228,11 @@ if "%PROCESSOR_ARCHITECTURE%"=="AMD64" SET px=64
 TITLE MQTT 客户端测试工具 - %vip%:%vpo%
 ECHO 下次以同样配置启动时，可以直接保存并使用以下命令启动：
 ECHO ON
-MqttClientTestTool_v1.1.0_Windows%px%.exe%el%%ip%%eca%%ece%%eck%%ecp%%ec%%et%%ew%%em%%es%%eo%%en%
+MqttClientTestTool_v1.3.1_Windows%px%.exe%el%%ip%%eca%%ece%%eck%%ecp%%ec%%et%%ew%%em%%es%%eo%%en%
+GOTO START
+
+:HELP
+notepad README.md
 GOTO START
 
 :PEND

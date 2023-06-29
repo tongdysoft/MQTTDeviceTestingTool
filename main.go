@@ -1,4 +1,4 @@
-//go:generate goversioninfo -icon=rc.ico -manifest=main.exe.manifest
+//go:generate goversioninfo -icon=icon.ico -manifest=main.exe.manifest
 package main
 
 import (
@@ -40,7 +40,7 @@ var (
 func main() {
 	go http.ListenAndServe(":9999", nil)
 	var (
-		version      string = "1.3.0"
+		version      string = "1.3.1"
 		versionView  bool   = false
 		listen       string
 		onlyID       string
@@ -58,7 +58,6 @@ func main() {
 		certPassword string
 	)
 	// 初始化启动参数
-	logPrint("i", lang("TITLE")+" v"+version)
 	flag.BoolVar(&versionView, "v", false, "Print version info")
 	flag.StringVar(&language, "l", "en", "Language ( en(default) | cn )")
 	flag.StringVar(&listen, "p", "127.0.0.1:1883", "Define listening on IP:Port (default: 127.0.0.1:1883 )")
@@ -68,17 +67,17 @@ func main() {
 	flag.StringVar(&logData, "m", "", "Log message to csv file")
 	flag.StringVar(&logStatus, "s", "", "Log state changes to a csv file")
 	flag.StringVar(&logFile, "o", "", "Save log to txt/log file")
-	flag.BoolVar(&monochrome, "n", false, "Use a monochrome color scheme")
-	flag.StringVar(&userFile, "u", "", "Users and permissions file path")
+	flag.BoolVar(&monochrome, "n", false, "Use a monochrome color scheme (When an abnormal character appears in Windows cmd.exe)")
+	flag.StringVar(&userFile, "u", "", "Users and permissions file (.json, visit README.md) path")
 	flag.StringVar(&certCA, "ca", "", "CA certificate file path")
 	flag.StringVar(&certCert, "ce", "", "Server certificate file path")
 	flag.StringVar(&certKey, "ck", "", "Server key file path")
 	flag.StringVar(&certPassword, "cp", "", "Server key file password")
 	flag.Parse()
+	logPrint("i", lang("TITLE")+" v"+version+" (KagurazakaYashi@Tongdy, 2023)")
+	logPrint("i", lang("HELP")+" https://github.com/tongdysoft/mqtt-test-server")
 	// 初始化设置
 	if versionView {
-		logPrint("i", "KagurazakaYashi@Tongdy, 2022")
-		logPrint("i", "https://github.com/tongdysoft/mqtt-test-server")
 		return
 	}
 	if len(onlyID) > 0 {

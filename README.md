@@ -1,12 +1,12 @@
-![icon](rc.ico)
+![icon](icon.png)
 
 # MQTT client test tool
 
-[ English | [中文](#MQTT%20%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%B5%8B%E8%AF%95%E5%B7%A5%E5%85%B7) ]
+[ English | [中文](#mqtt-客户端测试工具) ]
 
 This tool can help you test the stability of your device's MQTT connection. [Github](https://github.com/tongdysoft/mqtt-test-server)
 
-- version: `1.3.0`
+- version: `1.3.1`
 - golang version: `1.20.4`
 
 ## Install
@@ -23,7 +23,7 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
   - Define listening on IP:Port (default: `127.0.0.1:1883` )
   - To allow all IP addresses: `:1883`
 - `-u path-string`
-  - Users and permissions file path
+  - [Users and permissions file](#users-and-permissions-file-demo) (.json) path
 - `-ca path-string`
   - CA certificate file path
 - `-ce path-string`
@@ -45,7 +45,7 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
 - `-o path-string`
   - Save log to txt/log file
 - `-n`
-  - Use a monochrome color scheme
+  - Use a monochrome color scheme (When an abnormal character appears in Windows cmd.exe)
 - `-v`
   - Print version info
 
@@ -54,14 +54,14 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
 ```json
 {
   "Users": {
-    "u1":"u1",
-    "u2":"u2",
-    "u3":"u3"
+    "userName1": "User1Password",
+    "userName2": "User2Password",
+    "userName3": "User3Password"
   },
   "AllowedTopics": {
-    "u1": ["u1"],
-    "u2": ["u2"],
-    "u3": ["u3"]
+    "userName1": ["topic1", "topic2"],
+    "userName2": ["topic3"],
+    "userName3": ["topic4"]
   }
 }
 ```
@@ -97,7 +97,7 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
-- 版本: `1.3.0`
+- 版本: `1.3.1`
 - golang 版本: `1.20.4`
 
 ## 安装
@@ -114,7 +114,7 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
   - 指定要监听的地址和端口 (默认值: `127.0.0.1:1883` )
   - 如需允许所有 IP 地址： `:1883`
 - `-u 文件路径字符串`
-  - 用户和主题权限配置文件路径
+  - [用户和主题权限配置文件](#用户和主题权限配置文件示例) (.json) 路径
 - `-ca 文件路径字符串`
   - CA 证书文件路径
 - `-ce 文件路径字符串`
@@ -136,7 +136,7 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 - `-o 文件路径字符串`
   - 将日志输出保存到某个 .txt / .log 文件
 - `-n`
-  - 使用单色模式输出，避免某些不支持彩色的终端输出乱码
+  - 使用单色模式输出，避免某些不支持彩色的终端输出乱码（例如 Windows 的 cmd.exe）
 - `-v`
   - 显示版本号等信息并退出
 
@@ -147,14 +147,14 @@ Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under M
 ```json
 {
   "Users": {
-    "u1":"u1",
-    "u2":"u2",
-    "u3":"u3"
+    "用户名1": "用户名1的密码",
+    "用户名2": "用户名2的密码",
+    "用户名3": "用户名3的密码"
   },
   "AllowedTopics": {
-    "u1": ["u1"],
-    "u2": ["u2"],
-    "u3": ["u3"]
+    "用户名1": ["允许的主题1", "允许的主题2"],
+    "用户名2": ["允许的主题3"],
+    "用户名3": ["允许的主题4"]
   }
 }
 ```
@@ -176,4 +176,4 @@ go build .
 ## 许可
 
 Copyright (c) 2022 神楽坂雅詩@Tongdy MQTT 客户端测试工具。
-您对“软件”的复制、使用、修改及分发受木兰宽松许可证，第2版的条款的约束。
+您对“软件”的复制、使用、修改及分发受木兰宽松许可证，第 2 版的条款的约束。

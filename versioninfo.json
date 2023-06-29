@@ -2,14 +2,14 @@
     "FixedFileInfo": {
         "FileVersion": {
             "Major": 1,
-            "Minor": 0,
-            "Patch": 0,
+            "Minor": 3,
+            "Patch": 1,
             "Build": 0
         },
         "ProductVersion": {
             "Major": 1,
-            "Minor": 0,
-            "Patch": 0,
+            "Minor": 3,
+            "Patch": 1,
             "Build": 0
         },
         "FileFlagsMask": "3f",
@@ -22,14 +22,14 @@
         "Comments": "This tool can help you test the stability of your device's MQTT connection.",
         "CompanyName": "Tongdy",
         "FileDescription": "This tool can help you test the stability of your device's MQTT connection.",
-        "FileVersion": "v1.0.0.0",
+        "FileVersion": "1.3.1.0",
         "InternalName": "mqtt-test-server",
         "LegalCopyright": "2022, Kagurazaka Yashi.",
         "LegalTrademarks": "Tongdy",
         "OriginalFilename": "main.exe",
         "PrivateBuild": "",
         "ProductName": "MQTT client test tool",
-        "ProductVersion": "v1.0.0.0",
+        "ProductVersion": "1.3.1.0",
         "SpecialBuild": ""
     },
     "VarFileInfo": {
@@ -38,6 +38,6 @@
             "CharsetID": "04B0"
         }
     },
-    "IconPath": "rc.ico",
+    "IconPath": "icon.ico",
     "ManifestPath": "main.exe.manifest"
 }
