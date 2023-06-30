@@ -1,0 +1,19 @@
+{
+    "Users": {
+        "userName1": "User1Password",
+        "userName2": "User2Password",
+        "userName3": "User3Password"
+    },
+    "AllowedTopics": {
+        "userName1": [
+            "topic1",
+            "topic2"
+        ],
+        "userName2": [
+            "topic3"
+        ],
+        "userName3": [
+            "topic4"
+        ]
+    }
+}

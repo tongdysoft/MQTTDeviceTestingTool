@@ -4,6 +4,7 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -95,7 +96,7 @@ func main() {
 		logPrint("C", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("WORD"), onlyPayloadS))
 		onlyPayloadE = true
 	}
-	logInit()
+	logInit(listen, lang("TITLE")+" v"+version)
 	// 监听结束信号
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
@@ -213,27 +214,36 @@ func main() {
 	// }
 	// 设备连接出错
 	server.Events.OnError = func(cl events.Client, err error) {
-		logPrint("D", fmt.Sprintf("%s %s: %v", lang("CLIENT"), cl.ID, err))
+		logPrint("D", fmt.Sprintf("%s %s: %v", lang("CLIENT"), strCL(cl), err))
 	}
 	// 有设备连接到服务器
 	server.Events.OnConnect = func(cl events.Client, pk events.Packet) {
-		logFileStr(true, lang("CONNECT"), cl.ID, strings.ReplaceAll(fmt.Sprint(pk), "\n", ""))
-		logPrint("L", fmt.Sprintf("%s %s %s: %+v", lang("CLIENT"), cl.ID, lang("CONNECT"), pk))
+		pkJsonB, err := json.Marshal(pk)
+		if err != nil {
+			pkJsonB = []byte("")
+		}
+		clJsonB, err := json.Marshal(cl)
+		if err != nil {
+			clJsonB = []byte("")
+		}
+		var infoJson string = fmt.Sprintf("{\"Client\":%s,\"Packet\":%s}", string(clJsonB), string(pkJsonB))
+		logFileStr(true, strCL(cl), lang("CONNECT"), strings.ReplaceAll(infoJson, "\"", "'"))
+		logPrint("L", fmt.Sprintf("%s %s %s: %s", lang("CLIENT"), strCL(cl), lang("CONNECT"), infoJson))
 	}
 	// 设备断开连接
 	server.Events.OnDisconnect = func(cl events.Client, err error) {
-		logFileStr(true, lang("DISCONNECT"), cl.ID, strings.ReplaceAll(fmt.Sprint(err), "\n", ""))
-		logPrint("D", fmt.Sprintf("%s %s %s: %v", lang("CLIENT"), cl.ID, lang("DISCONNECT"), err))
+		logFileStr(true, strCL(cl), lang("DISCONNECT"), strings.ReplaceAll(fmt.Sprint(err), "\n", " "))
+		logPrint("D", fmt.Sprintf("%s %s %s: %v", lang("CLIENT"), strCL(cl), lang("DISCONNECT"), err))
 	}
 	// 收到订阅请求
 	server.Events.OnSubscribe = func(filter string, cl events.Client, qos byte) {
-		logFileStr(true, lang("SUBSCRIBED"), filter, fmt.Sprintf("QOS%d", qos))
-		logPrint("S", fmt.Sprintf("%s %s %s %s, (QOS:%v)", lang("CLIENT"), cl.ID, lang("SUBSCRIBED"), filter, qos))
+		logFileStr(true, strCL(cl), lang("SUBSCRIBED"), fmt.Sprintf("%s (QOS%d)", filter, qos))
+		logPrint("S", fmt.Sprintf("%s %s %s %s, (QOS:%v)", lang("CLIENT"), strCL(cl), lang("SUBSCRIBED"), filter, qos))
 	}
 	// 收到取消订阅请求
 	server.Events.OnUnsubscribe = func(filter string, cl events.Client) {
-		logFileStr(true, lang("SUBSCRIBED"), filter, "")
-		logPrint("U", fmt.Sprintf("%s %s %s %s", lang("CLIENT"), cl.ID, lang("UNSUBSCRIBED"), filter))
+		logFileStr(true, strCL(cl), lang("UNSUBSCRIBED"), filter)
+		logPrint("U", fmt.Sprintf("%s %s %s %s", lang("CLIENT"), strCL(cl), lang("UNSUBSCRIBED"), filter))
 	}
 	// 收到消息
 	server.Events.OnMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {
@@ -259,8 +269,8 @@ func main() {
 				return
 			}
 		}
-		logFileStr(false, *clID, *topic, payload)
-		logPrint("M", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), *clID, lang("TOPIC"), *topic, lang("PAYLOAD"), payload))
+		logFileStr(false, strCL(cl), *topic, payload)
+		logPrint("M", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), strCL(cl), lang("TOPIC"), *topic, lang("PAYLOAD"), payload)) // 收到消息，发件人...
 		return pk, nil
 	}
 	// 启动完毕

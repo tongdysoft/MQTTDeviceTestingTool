@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/logrusorgru/aurora"
+	"github.com/mochi-co/mqtt/server/events"
 )
 
-func logInit() {
+func logInit(listen string, soft string) {
 	if len(logData) > 0 {
 		file, err := os.OpenFile(logData, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
@@ -19,7 +20,7 @@ func logInit() {
 			logDataF = file
 			logPrint("C", fmt.Sprintf("%s: %s", lang("LOGDATA"), logData))
 			logDataE = true
-			logFileStr(true, lang("START"), "", "")
+			logFileStr(true, listen, lang("START"), soft)
 		}
 	}
 	if len(logStatus) > 0 {
@@ -30,7 +31,7 @@ func logInit() {
 			logStatusF = file
 			logPrint("C", fmt.Sprintf("%s: %s", lang("LOGSTAT"), logStatus))
 			logStatusE = true
-			logFileStr(true, lang("START"), "", "")
+			logFileStr(true, listen, lang("START"), soft)
 		}
 	}
 	if len(logFile) > 0 {
@@ -41,7 +42,7 @@ func logInit() {
 			logFileF = file
 			logPrint("C", fmt.Sprintf("%s: %s", lang("LOG"), logFile))
 			logFileE = true
-			logFileStr(true, lang("START"), "", "")
+			logFileStr(true, listen, lang("START"), soft)
 		}
 	}
 }
@@ -105,4 +106,13 @@ func logFileStr(isStatus bool, infos ...string) {
 			write.Flush()
 		}
 	}
+}
+
+func strCL(cl events.Client) string {
+	// {ID:MQTT_FX_Client Remote:127.0.0.1:29635 Listener:127.0.0.1:1883 Username:[117 49 50 50 50 50 50] CleanSession:true}
+	var userName string = string(cl.Username)
+	if len(userName) > 0 {
+		userName += "@"
+	}
+	return fmt.Sprintf("%s%s(%s)", userName, cl.ID, cl.Remote)
 }

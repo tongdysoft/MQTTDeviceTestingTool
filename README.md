@@ -1,6 +1,6 @@
 ![icon](icon.png)
 
-# MQTT client test tool
+# MQTT Client Test Tool
 
 [ English | [中文](#mqtt-客户端测试工具) ]
 
@@ -23,7 +23,7 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
   - Define listening on IP:Port (default: `127.0.0.1:1883` )
   - To allow all IP addresses: `:1883`
 - `-u path-string`
-  - [Users and permissions file](#users-and-permissions-file-demo) (.json) path
+  - [Users and permissions file](#examples-of-user-and-rights-profiles) (.json) path
 - `-ca path-string`
   - CA certificate file path
 - `-ce path-string`
@@ -49,7 +49,7 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
 - `-v`
   - Print version info
 
-## Users and permissions file DEMO
+## Examples of User and Rights Profiles
 
 ```json
 {
@@ -82,7 +82,7 @@ Build all platforms under Windows: `build.bat`
 
 ## LICENSE
 
-Copyright (c) 2022 KagurazakaYashi@Tongdy MqttClientTestTool is licensed under Mulan PSL v2. You can use this software according to the terms and conditions of the Mulan PSL v2. You may obtain a copy of Mulan PSL v2 at: <http://license.coscl.org.cn/MulanPSL2> THIS SOFTWARE IS PROVIDED ON AN “AS IS” BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the Mulan PSL v2 for more details.
+Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy](https://github.com/tongdysoft) MqttClientTestTool is licensed under Mulan PSL v2. You can use this software according to the terms and conditions of the Mulan PSL v2. You may obtain a copy of Mulan PSL v2 at: <http://license.coscl.org.cn/MulanPSL2> THIS SOFTWARE IS PROVIDED ON AN “AS IS” BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the Mulan PSL v2 for more details.
 
 ## Third-party
 
@@ -175,5 +175,5 @@ go build .
 
 ## 许可
 
-Copyright (c) 2022 神楽坂雅詩@Tongdy MQTT 客户端测试工具。
+Copyright (c) 2022 [神楽坂雅詩](https://github.com/kagurazakayashi)@[Tongdy](https://github.com/tongdysoft) MQTT 客户端测试工具。
 您对“软件”的复制、使用、修改及分发受木兰宽松许可证，第 2 版的条款的约束。
