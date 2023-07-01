@@ -5,6 +5,7 @@ tmp/*
 bin/*
 *.exe
 *.txt
+*.log
 *.csv
 *.syso
 *.xz

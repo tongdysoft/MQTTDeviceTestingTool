@@ -25,8 +25,8 @@ func loadUserAuthFile(userFile string) *Auth {
 	var userPermissions Auth
 	json.Unmarshal(userData, &userPermissions)
 	var auth *Auth = &userPermissions
-	logPrint("i", fmt.Sprintf("%s %s: %d", lang("LOADED"), lang("USERDB"), len(userPermissions.Users)))
-	logPrint("i", fmt.Sprintf("%s %s: %d", lang("LOADED"), lang("PERMDB"), len(userPermissions.AllowedTopics)))
+	logPrint("I", fmt.Sprintf("%s %s: %d", lang("LOADED"), lang("USERDB"), len(userPermissions.Users)))
+	logPrint("I", fmt.Sprintf("%s %s: %d", lang("LOADED"), lang("PERMDB"), len(userPermissions.AllowedTopics)))
 	return auth
 }
 

@@ -1,4 +1,4 @@
-REM charset: GB2312, line break: CRLF, version: 1.3.1
+REM charset: GB2312, line break: CRLF, version: 1.3.2
 SET vl=cn
 SET vip=0.0.0.0
 SET vpo=1883
@@ -228,7 +228,7 @@ if "%PROCESSOR_ARCHITECTURE%"=="AMD64" SET px=64
 TITLE MQTT 客户端测试工具 - %vip%:%vpo%
 ECHO 下次以同样配置启动时，可以直接保存并使用以下命令启动：
 ECHO ON
-MqttClientTestTool_v1.3.1_Windows%px%.exe%el%%ip%%eca%%ece%%eck%%ecp%%ec%%et%%ew%%em%%es%%eo%%en%
+MqttClientTestTool_v1.3.2_Windows%px%.exe%el%%ip%%eca%%ece%%eck%%ecp%%ec%%et%%ew%%em%%es%%eo%%en%
 GOTO START
 
 :HELP

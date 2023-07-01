@@ -12,7 +12,7 @@ import (
 )
 
 func logInit(listen string, soft string) {
-	if len(logData) > 0 {
+	if len(logData) > 0 && autoDelete(logData) {
 		file, err := os.OpenFile(logData, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
 			logPrint("X", fmt.Sprintf("%s %s: %s", lang("LOGFAIL"), lang("LOGDATA"), err))
@@ -20,10 +20,10 @@ func logInit(listen string, soft string) {
 			logDataF = file
 			logPrint("C", fmt.Sprintf("%s: %s", lang("LOGDATA"), logData))
 			logDataE = true
-			logFileStr(true, listen, lang("START"), soft)
+			logFileStr(false, listen, soft, lang("START"))
 		}
 	}
-	if len(logStatus) > 0 {
+	if len(logStatus) > 0 && autoDelete(logStatus) {
 		file, err := os.OpenFile(logStatus, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
 			logPrint("X", fmt.Sprintf("%s %s: %s", lang("LOGFAIL"), lang("LOGSTAT"), err))
@@ -34,7 +34,7 @@ func logInit(listen string, soft string) {
 			logFileStr(true, listen, lang("START"), soft)
 		}
 	}
-	if len(logFile) > 0 {
+	if len(logFile) > 0 && autoDelete(logFile) {
 		file, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
 			logPrint("X", fmt.Sprintf("%s %s: %s", lang("LOGFAIL"), lang("LOG"), err))
@@ -42,9 +42,20 @@ func logInit(listen string, soft string) {
 			logFileF = file
 			logPrint("C", fmt.Sprintf("%s: %s", lang("LOG"), logFile))
 			logFileE = true
-			logFileStr(true, listen, lang("START"), soft)
 		}
 	}
+}
+
+func autoDelete(filePath string) bool {
+	err := os.Remove(filePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logPrint("X", fmt.Sprintf("%s %s: %s", lang("LOGFAIL"), lang("LOG"), err))
+			return false
+		}
+		return true
+	}
+	return true
 }
 
 func logPrint(iconChar string, text string) {
@@ -109,7 +120,6 @@ func logFileStr(isStatus bool, infos ...string) {
 }
 
 func strCL(cl events.Client) string {
-	// {ID:MQTT_FX_Client Remote:127.0.0.1:29635 Listener:127.0.0.1:1883 Username:[117 49 50 50 50 50 50] CleanSession:true}
 	var userName string = string(cl.Username)
 	if len(userName) > 0 {
 		userName += "@"

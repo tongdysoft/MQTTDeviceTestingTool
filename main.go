@@ -41,7 +41,7 @@ var (
 func main() {
 	go http.ListenAndServe(":9999", nil)
 	var (
-		version      string = "1.3.1"
+		version      string = "1.3.2"
 		versionView  bool   = false
 		listen       string
 		onlyID       string
@@ -75,8 +75,8 @@ func main() {
 	flag.StringVar(&certKey, "ck", "", "Server key file path")
 	flag.StringVar(&certPassword, "cp", "", "Server key file password")
 	flag.Parse()
-	logPrint("i", lang("TITLE")+" v"+version+" (KagurazakaYashi@Tongdy, 2023)")
-	logPrint("i", lang("HELP")+" https://github.com/tongdysoft/mqtt-test-server")
+	logPrint("I", lang("TITLE")+" v"+version+" (KagurazakaYashi@Tongdy, 2023)")
+	logPrint("I", lang("HELP")+" https://github.com/tongdysoft/mqtt-test-server")
 	// 初始化设置
 	if versionView {
 		return
@@ -169,7 +169,7 @@ func main() {
 		logPrint("C", fmt.Sprintf("%s: (%d)", lang("SERVERKEYPWD"), len(certPassword)))
 	}
 	// 初始化 MQTT 服务器
-	logPrint("i", lang("BOOTING")+listen+" ...")
+	logPrint("I", lang("BOOTING")+listen+" ...")
 	server := mqtt.NewServer(nil)
 	tcp := listeners.NewTCP(listen, listen)
 	err := error(nil)
@@ -274,7 +274,7 @@ func main() {
 		return pk, nil
 	}
 	// 启动完毕
-	logPrint("i", lang("BOOTOK"))
+	logPrint("I", lang("BOOTOK"))
 	// 处理结束信号
 	<-done
 	close(done)
@@ -289,7 +289,7 @@ func main() {
 	if logStatusE {
 		logStatusF.Close()
 	}
-	logPrint("i", lang("END"))
+	logPrint("I", lang("END"))
 	os.Exit(0)
 }
 

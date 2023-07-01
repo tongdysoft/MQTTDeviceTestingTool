@@ -6,7 +6,7 @@
 
 This tool can help you test the stability of your device's MQTT connection. [Github](https://github.com/tongdysoft/mqtt-test-server)
 
-- version: `1.3.1`
+- version: `1.3.2`
 - golang version: `1.20.4`
 
 ## Install
@@ -97,7 +97,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
-- 版本: `1.3.1`
+- 版本: `1.3.2`
 - golang 版本: `1.20.4`
 
 ## 安装
@@ -140,7 +140,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 - `-v`
   - 显示版本号等信息并退出
 
-可以将 `中文交互模式.bat` 和 exe 放在一起，双击启动交互模式，无需关心命令行参数书写。
+可以将 `InteractiveModeCHS.bat` 和 exe 放在一起，双击启动中文交互模式，无需关心命令行参数书写。
 
 ### 用户和主题权限配置文件示例
 
