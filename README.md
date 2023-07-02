@@ -1,4 +1,4 @@
-![icon](icon.png)
+![icon](macOS/mqttclienttesttool/AppIcon.xcassets/AppIcon.appiconset/MQTT%20client%20test%20tool%205.png)
 
 # MQTT Client Test Tool
 
@@ -49,7 +49,7 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
 - `-v`
   - Print version info
 
-## Examples of User and Rights Profiles
+### Examples of User and Rights Profiles
 
 ```json
 {
@@ -65,6 +65,11 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
   }
 }
 ```
+
+### macOS Config
+
+1. Click `show package contents` in the executable file (e.g. `MqttClientTestTool.app`).
+2. Edit the `Contents/Resources/run.sh` script file and add parameters at the comment position.
 
 ## Build
 
@@ -140,8 +145,6 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 - `-v`
   - 显示版本号等信息并退出
 
-可以将 `InteractiveModeCHS.bat` 和 exe 放在一起，双击启动中文交互模式，无需关心命令行参数书写。
-
 ### 用户和主题权限配置文件示例
 
 ```json
@@ -158,6 +161,15 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
   }
 }
 ```
+
+### macOS 系统中添加启动参数
+
+1. 在可执行文件（例如 `MqttClientTestTool.app` ）中点击 `显示包内容` 。
+2. 编辑 `Contents/Resources/run.sh` 脚本文件，在里面注释位置处添加参数。
+
+### Windows 系统中使用中文交互模式
+
+可以将 `InteractiveModeCHS.bat` 和 exe 放在一起，双击启动中文交互模式，无需关心命令行参数书写。
 
 ## 编译
 
