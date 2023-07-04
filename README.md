@@ -1,17 +1,31 @@
 ![icon](macOS/mqttclienttesttool/AppIcon.xcassets/AppIcon.appiconset/MQTT%20client%20test%20tool%205.png)
 
-# MQTT Client Test Tool
+# [MQTT Client Test Tool](https://github.com/tongdysoft/mqtt-test-server)
 
-[ English | [中文](#mqtt-客户端测试工具) ]
+[ English | [中文](#mqtt-客户端测试工具)]
 
-This tool can help you test the stability of your device's MQTT connection. [Github](https://github.com/tongdysoft/mqtt-test-server)
+This tool can help you test the stability of your device's MQTT connection.
 
 - version: `1.3.2`
 - golang version: `1.20.4`
 
+## Function
+
+- Display and log data and behavior of MQTT devices.
+
 ## Install
 
-Download the program from Release. No installation required.
+Download the program from [Release](releases). No installation required.
+
+| Release files (Archive)  | OS      | >=ver | BC  | Arch                |
+| ------------------------ | ------- | ----- | --- | ------------------- |
+| `bin/*_Linux32.zip`      | Linux   | 2.6   | 32  | i386 (x86)          |
+| `bin/*_Linux64.zip`      | Linux   | 2.6   | 64  | amd64(x86-64)       |
+| `bin/*_macOSI64.dmg`     | macOS   | 10.13 | 64  | amd64(x86-64)       |
+| `bin/*_macOSM64.dmg`     | macOS   | 11    | 64  | arm64(AppleSilicon) |
+| `bin/*_Windows32.cab`    | Windows | 7     | 32  | i386 (x86)          |
+| `bin/*_Windows64.cab`    | Windows | 7     | 64  | amd64(x86-64)       |
+| `bin/*_WindowsARM64.cab` | Windows | 10    | 64  | arm64(aarch64)      |
 
 ## Usage
 
@@ -68,8 +82,11 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
 
 ### macOS Config
 
-1. Click `show package contents` in the executable file (e.g. `MqttClientTestTool.app`).
-2. Edit the `Contents/Resources/run.sh` script file and add parameters at the comment position.
+### Add startup parameters in macOS system
+
+1. Open the `.dmg` file of the corresponding platform in Release, find the `.app` file inside, and copy it to the `Applications` folder.
+2. Right click on the `.app` file and select `Show Package Contents`.
+3. Edit the `Contents/Resources/run.sh` script file, and add parameters at the comment position.
 
 ## Build
 
@@ -98,16 +115,30 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 - josephspurrier/goversioninfo ([MIT License](https://github.com/josephspurrier/goversioninfo/blob/master/LICENSE))
 - rs/xid ([MIT License](https://github.com/rs/xid/blob/master/LICENSE))
 
-# MQTT 客户端测试工具
+# [MQTT 客户端测试工具](https://github.com/tongdysoft/mqtt-test-server)
 
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
 - 版本: `1.3.2`
 - golang 版本: `1.20.4`
 
+## 功能
+
+- 显示和记录 MQTT 设备的数据和行为。
+
 ## 安装
 
-从 Release 下载相应系统的可执行文件即可，无需安装。
+从 [Release](releases) 下载相应系统的可执行文件即可，无需安装。
+
+| Release 文件（压缩包）   | 系统    | 最低版 | 位  | 体系结构            |
+| ------------------------ | ------- | ------ | --- | ------------------- |
+| `bin/*_Linux32.zip`      | Linux   | 2.6    | 32  | i386 (x86)          |
+| `bin/*_Linux64.zip`      | Linux   | 2.6    | 64  | amd64(x86-64)       |
+| `bin/*_macOSI64.dmg`     | macOS   | 10.13  | 64  | amd64(x86-64)       |
+| `bin/*_macOSM64.dmg`     | macOS   | 11     | 64  | arm64(AppleSilicon) |
+| `bin/*_Windows32.cab`    | Windows | 7      | 32  | i386 (x86)          |
+| `bin/*_Windows64.cab`    | Windows | 7      | 64  | amd64(x86-64)       |
+| `bin/*_WindowsARM64.cab` | Windows | 10     | 64  | arm64(aarch64)      |
 
 ## 使用说明
 
@@ -164,8 +195,9 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 ### macOS 系统中添加启动参数
 
-1. 在可执行文件（例如 `MqttClientTestTool.app` ）中点击 `显示包内容` 。
-2. 编辑 `Contents/Resources/run.sh` 脚本文件，在里面注释位置处添加参数。
+1. 打开 Release 中的相应平台的 `.dmg` 文件，找到里面的 `.app` 文件，将其复制到 `应用程序` 文件夹.
+2. 右键点击改 `.app` 文件，选择 `显示包内容` 。
+3. 编辑 `Contents/Resources/run.sh` 脚本文件，在里面注释位置处添加参数。
 
 ### Windows 系统中使用中文交互模式
 
@@ -179,7 +211,15 @@ go generate  # 只有 Windows 需要执行这条
 go build .
 ```
 
-在 Windows 环境下编译所有平台版本: `build.bat`
+### 跨平台编译
+
+在 Windows x64 中也可以通过批处理一键生成全平台二进制文件：
+
+```bat
+build.bat
+```
+
+批处理脚本最后会调用 `MAKECAB` 和 `7z` 命令进行压缩。
 
 ## 截图
 
