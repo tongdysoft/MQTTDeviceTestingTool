@@ -23,19 +23,20 @@ import (
 )
 
 var (
-	language   string
-	timeFormat string = "2006-01-02 15:04:05"
-	logFile    string
-	userFile   string
-	logData    string
-	logStatus  string
-	logFileE   bool = false
-	logDataE   bool = false
-	logStatusE bool = false
-	logFileF   *os.File
-	logDataF   *os.File
-	logStatusF *os.File
-	monochrome bool = false
+	language      string
+	timeFormat    string = "2006-01-02 15:04:05"
+	logFile       string
+	userFile      string
+	logData       string
+	logStatus     string
+	logFileE      bool = false
+	logDataE      bool = false
+	logStatusE    bool = false
+	fileTimestamp bool = false
+	logFileF      *os.File
+	logDataF      *os.File
+	logStatusF    *os.File
+	monochrome    bool = false
 )
 
 func main() {
@@ -68,6 +69,7 @@ func main() {
 	flag.StringVar(&logData, "m", "", "Log message to csv file")
 	flag.StringVar(&logStatus, "s", "", "Log state changes to a csv file")
 	flag.StringVar(&logFile, "o", "", "Save log to txt/log file")
+	flag.BoolVar(&fileTimestamp, "ts", false, "Use timestamps in logged files")
 	flag.BoolVar(&monochrome, "n", false, "Use a monochrome color scheme (When an abnormal character appears in Windows cmd.exe)")
 	flag.StringVar(&userFile, "u", "", "Users and permissions file (.json, visit README.md) path")
 	flag.StringVar(&certCA, "ca", "", "CA certificate file path")

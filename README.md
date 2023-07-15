@@ -7,7 +7,7 @@
 This tool can help you test the stability of your device's MQTT connection.
 
 - version: `1.3.2`
-- golang version: `1.20.4`
+- golang version: `1.20.6`
 
 ## Function
 
@@ -29,7 +29,7 @@ Download the program from [Release](releases). No installation required.
 
 ## Usage
 
-Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -n | -v >`
+Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
 
 - `-l string`
   - Language ( `en(default) | cn` )
@@ -58,6 +58,8 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
   - Log state changes to a csv file
 - `-o path-string`
   - Save log to txt/log file
+- `-ts`
+  - Use timestamps in logged files (instead of the time string)
 - `-n`
   - Use a monochrome color scheme (When an abnormal character appears in Windows cmd.exe)
 - `-v`
@@ -120,7 +122,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
 - 版本: `1.3.2`
-- golang 版本: `1.20.4`
+- golang 版本: `1.20.6`
 
 ## 功能
 
@@ -142,7 +144,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 ## 使用说明
 
-命令行参数: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -n | -v >`
+命令行参数: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
 
 - `-l 字符串`
   - 语言 ( `en(英语,默认) | cn(简体中文)` )
@@ -165,12 +167,14 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
   - 只接收这些主题的信息（使用 `,` 分隔）
 - `-w 字符串`
   - 只有消息内容包含这些关键词才会处理（使用 `,` 分隔）
-- `-d 文件路径字符串`
+- `-m 文件路径字符串`
   - 将收取到的消息保存到某个 .csv 文件
 - `-s 文件路径字符串`
   - 将客户端的连接、断开、订阅、退订等行为保存到某个 .csv 文件
 - `-o 文件路径字符串`
   - 将日志输出保存到某个 .txt / .log 文件
+- `-ts`
+  - 在记录的文件中使用时间戳而不是时间
 - `-n`
   - 使用单色模式输出，避免某些不支持彩色的终端输出乱码（例如 Windows 的 cmd.exe）
 - `-v`

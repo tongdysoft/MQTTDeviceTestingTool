@@ -101,7 +101,13 @@ func logPrint(iconChar string, text string) {
 }
 
 func logFileStr(isStatus bool, infos ...string) {
-	var timeStr string = time.Now().Format(timeFormat)
+	var timeStr string = ""
+	tn := time.Now()
+	if fileTimestamp {
+		timeStr = fmt.Sprintf("%d", tn.UnixNano())
+	} else {
+		timeStr = time.Now().Format(timeFormat)
+	}
 	var infoArr []string = append([]string{timeStr}, infos...)
 	var info string = "\"" + strings.Join(infoArr, "\",\"") + "\"\n"
 	if isStatus {
