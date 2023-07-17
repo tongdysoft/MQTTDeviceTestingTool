@@ -62,7 +62,7 @@ func main() {
 	// 初始化启动参数
 	flag.BoolVar(&versionView, "v", false, "Print version info")
 	flag.StringVar(&language, "l", "en", "Language ( en(default) | cn )")
-	flag.StringVar(&listen, "p", "127.0.0.1:1883", "Define listening on IP:Port (default: 127.0.0.1:1883 )")
+	flag.StringVar(&listen, "p", "0.0.0.0:1883", "Define listening on IP:Port (default: 0.0.0.0:1883 )")
 	flag.StringVar(&onlyID, "c", "", "Only allow these client IDs (comma separated)")
 	flag.StringVar(&onlyTopic, "t", "", "Only allow these topics (comma separated)")
 	flag.StringVar(&onlyPayload, "w", "", "Only allow these words in message content (comma separated)")

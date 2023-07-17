@@ -86,9 +86,9 @@ GOTO START
 CLS
 ECHO 当前值: %vip%
 ECHO 请输入或选择 IP 地址:
-ECHO [0] 0.0.0.0
-ECHO [1] 127.0.0.1
-ECHO [l] localhost
+ECHO [0] 允许所有IP(0.0.0.0)
+ECHO [1] 本机(127.0.0.1)
+ECHO [l] 本机(localhost)
 ECHO [c] 可查看当前网卡信息
 ECHO [手动输入] IP 地址
 SET /P vit=IP 地址: 

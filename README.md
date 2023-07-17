@@ -34,7 +34,7 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
 - `-l string`
   - Language ( `en(default) | cn` )
 - `-p string`
-  - Define listening on IP:Port (default: `127.0.0.1:1883` )
+  - Define listening on IP:Port (default: `0.0.0.0:1883` )
   - To allow all IP addresses: `:1883`
 - `-u path-string`
   - [Users and permissions file](#examples-of-user-and-rights-profiles) (.json) path
@@ -149,7 +149,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 - `-l 字符串`
   - 语言 ( `en(英语,默认) | cn(简体中文)` )
 - `-p 字符串`
-  - 指定要监听的地址和端口 (默认值: `127.0.0.1:1883` )
+  - 指定要监听的地址和端口 (默认值: `0.0.0.0:1883` )
   - 如需允许所有 IP 地址： `:1883`
 - `-u 文件路径字符串`
   - [用户和主题权限配置文件](#用户和主题权限配置文件示例) (.json) 路径
