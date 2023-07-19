@@ -27,6 +27,13 @@ Download the program from [Release](releases). No installation required.
 | `bin/*_Windows64.cab`    | Windows | 7     | 64  | amd64(x86-64)       |
 | `bin/*_WindowsARM64.cab` | Windows | 10    | 64  | arm64(aarch64)      |
 
+Non-Windows systems need to use `chmod +x <executable file name>` to add permission to run.
+
+### Docker
+
+- You can refer to and modify `Dockerfile` and `docker.sh` files to create Docker images and containers.
+- Deployment is relative to the compiled file, run on alpine, does not include compilation of source code.
+
 ## Usage
 
 Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
@@ -141,6 +148,13 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 | `bin/*_Windows32.cab`    | Windows | 7      | 32  | i386 (x86)          |
 | `bin/*_Windows64.cab`    | Windows | 7      | 64  | amd64(x86-64)       |
 | `bin/*_WindowsARM64.cab` | Windows | 10     | 64  | arm64(aarch64)      |
+
+非 Windows 系统需要使用 `chmod +x <解压缩后的可执行文件名>` 来添加运行权限。
+
+### Docker 部署
+
+- 可以参考和修改 `Dockerfile` 和 `docker.sh` 文件，创建 Docker 镜像和容器。
+- 部署是相对于编译完成后的文件，在 alpine 上运行，不包含源代码的编译。
 
 ## 使用说明
 
