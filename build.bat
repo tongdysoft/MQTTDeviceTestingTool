@@ -12,6 +12,8 @@ go build -o bin\%NAMEV%Windows64.exe .
 DEL /Q *.syso
 SET GOOS=linux
 go build -o bin\%NAMEV%Linux64 .
+COPY "macOS\mqttclienttesttool\AppIcon.xcassets\AppIcon.appiconset\MQTT client test tool.png" bin\icon.png
+COPY mqttclienttesttool.desktop bin\
 SET GOOS=darwin
 MD bin\%NAMEV%macOSI64.app
 MD bin\%NAMEV%macOSI64.app\Contents
@@ -50,8 +52,8 @@ dir /b *WindowsARM64*.exe InteractiveMode*.bat README.md >l.txt
 MAKECAB /F l.txt /D compressiontype=lzx /D compressionmemory=21 /D maxdisksize=1024000000
 MOVE disk1\1.cab %NAMEV%WindowsARM64.cab
 RD disk1
-7z a -mx9 -tzip %NAMEV%Linux32.zip %NAMEV%Linux32* README.md icon.png
-7z a -mx9 -tzip %NAMEV%Linux64.zip %NAMEV%Linux64* README.md icon.png
+7z a -mx9 -tzip %NAMEV%Linux32.zip %NAMEV%Linux32* README.md icon.png mqttclienttesttool.desktop
+7z a -mx9 -tzip %NAMEV%Linux64.zip %NAMEV%Linux64* README.md icon.png mqttclienttesttool.desktop
 7z a -mx9 -tzip %NAMEV%macOSI64.zip %NAMEV%macOSI64.app README.md
 7z a -mx9 -tzip %NAMEV%macOSM64.zip %NAMEV%macOSM64.app README.md
 RD /S /Q %NAMEV%macOSI64.app
@@ -63,6 +65,8 @@ DEL /Q *.bat
 DEL /Q *.md
 DEL /Q *.icns
 DEL /Q *.txt
+DEL /Q *.png
+DEL /Q *.desktop
 DEL /Q setup.*
 cd ..
 SET NAME=

@@ -40,6 +40,11 @@ Non-Windows systems need to use `chmod +x <executable file name>` to add permiss
 2. Modify the path and start user in `/etc/systemd/system/mqtttestclient.service`
 3. `sudo systemctl start mqtttestclient.service`
 
+### Linux desktop shortcuts
+
+1. Copy `mqttclienttesttool.desktop` to `~/Desktop`
+2. Modify the execution file and icon path in `~/Desktop/mqttclienttesttool.desktop`
+
 ## Usage
 
 Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
@@ -167,6 +172,11 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 1. 复制 `mqtttestclient.service` 到 `/etc/systemd/system/`
 2. 修改 `/etc/systemd/system/mqtttestclient.service` 中的路径和启动用户等
 3. `sudo systemctl start mqtttestclient.service`
+
+### Linux 桌面快捷方式
+
+1. 复制 `mqttclienttesttool.desktop` 到 `~/桌面`
+2. 修改 `~/桌面/mqttclienttesttool.desktop` 中的执行文件和图标路径
 
 ## 使用说明
 
