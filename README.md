@@ -34,6 +34,12 @@ Non-Windows systems need to use `chmod +x <executable file name>` to add permiss
 - You can refer to and modify `Dockerfile` and `docker.sh` files to create Docker images and containers.
 - Deployment is relative to the compiled file, run on alpine, does not include compilation of source code.
 
+### Linux systemd
+
+1. Copy `mqtttestclient.service` to `/etc/systemd/system/`
+2. Modify the path and start user in `/etc/systemd/system/mqtttestclient.service`
+3. `sudo systemctl start mqtttestclient.service`
+
 ## Usage
 
 Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
@@ -155,6 +161,12 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 - 可以参考和修改 `Dockerfile` 和 `docker.sh` 文件，创建 Docker 镜像和容器。
 - 部署是相对于编译完成后的文件，在 alpine 上运行，不包含源代码的编译。
+
+### Linux 系统服务 (systemd)
+
+1. 复制 `mqtttestclient.service` 到 `/etc/systemd/system/`
+2. 修改 `/etc/systemd/system/mqtttestclient.service` 中的路径和启动用户等
+3. `sudo systemctl start mqtttestclient.service`
 
 ## 使用说明
 

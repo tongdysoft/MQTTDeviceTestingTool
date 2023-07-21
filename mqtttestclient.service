@@ -1,0 +1,12 @@
+[Unit]
+Description=MQTT Client Test Tool
+After=network.target
+
+[Service]
+ExecStart=/root/MqttClientTestTool_v1.3.2_Linux64
+WorkingDirectory=/root/
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
