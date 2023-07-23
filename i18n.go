@@ -3,7 +3,7 @@ package main
 var langs map[string][]string = map[string][]string{
 	"TITLE":           {"MQTT Client test tool", "MQTT 客户端测试工具"},
 	"HELP":            {"For help, visit README.md . Web:", "如需帮助，请参阅 README.md 。在线指南:"},
-	"BOOTING":         {"Starting MQTT server, listen ", "正在启动 MQTT 服务器，监听 "},
+	"BOOTING":         {"Starting MQTT server...", "正在启动 MQTT 服务器..."},
 	"START":           {"service start", "服务启动"},
 	"SERVERFAIL":      {"Failed to start MQTT server !", "启动 MQTT 服务器失败！"},
 	"BOOTOK":          {"MQTT server started.", "MQTT 服务器已启动。"},

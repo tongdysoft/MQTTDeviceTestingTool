@@ -58,9 +58,13 @@ func autoDelete(filePath string) bool {
 	return true
 }
 
-func logPrint(iconChar string, text string) {
+func logPrint(iconChar string, text string, titleMore ...string) {
 	var timeStr string = time.Now().Format(timeFormat)
-	var log0 string = fmt.Sprintf("[%s][%s]", iconChar, timeStr)
+	var more string = ""
+	if len(titleMore) > 0 {
+		more = fmt.Sprintf("[%s]", strings.Join(titleMore, "]["))
+	}
+	var log0 string = fmt.Sprintf("[%s][%s]%s", iconChar, timeStr, more)
 	var log1 string = fmt.Sprintf(" %s\n", text)
 	if logFileE {
 		write := bufio.NewWriter(logFileF)
@@ -74,11 +78,11 @@ func logPrint(iconChar string, text string) {
 	}
 	switch iconChar {
 	case "M": // 信息
+		fmt.Print(aurora.BgBrightBlack(log0))
+		fmt.Print(aurora.White(log1))
+	case "C": // 配置
 		fmt.Print(aurora.BgMagenta(log0))
 		fmt.Print(aurora.Magenta(log1))
-	case "C": // 配置
-		fmt.Print(aurora.BrightWhite(log0))
-		fmt.Print(aurora.BrightWhite(log1))
 	case "L": // 连接
 		fmt.Print(aurora.BgGreen(log0))
 		fmt.Print(aurora.Green(log1))

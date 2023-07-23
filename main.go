@@ -171,7 +171,7 @@ func main() {
 		logPrint("C", fmt.Sprintf("%s: (%d)", lang("SERVERKEYPWD"), len(certPassword)))
 	}
 	// 初始化 MQTT 服务器
-	logPrint("I", lang("BOOTING")+listen+" ...")
+	logPrint("I", lang("BOOTING"), listen)
 	server := mqtt.NewServer(nil)
 	tcp := listeners.NewTCP(listen, listen)
 	err := error(nil)
@@ -207,7 +207,7 @@ func main() {
 	go func() {
 		err := server.Serve()
 		if err != nil {
-			logPrint("X", lang("SERVERFAIL"))
+			logPrint("X", lang("SERVERFAIL"), listen)
 			log.Fatal(err)
 		}
 	}()
@@ -216,7 +216,7 @@ func main() {
 	// }
 	// 设备连接出错
 	server.Events.OnError = func(cl events.Client, err error) {
-		logPrint("D", fmt.Sprintf("%s %s: %v", lang("CLIENT"), strCL(cl), err))
+		logPrint("D", fmt.Sprintf("%v", err), strCL(cl))
 	}
 	// 有设备连接到服务器
 	server.Events.OnConnect = func(cl events.Client, pk events.Packet) {
@@ -230,22 +230,22 @@ func main() {
 		}
 		var infoJson string = fmt.Sprintf("{\"Client\":%s,\"Packet\":%s}", string(clJsonB), string(pkJsonB))
 		logFileStr(true, strCL(cl), lang("CONNECT"), strings.ReplaceAll(infoJson, "\"", "'"))
-		logPrint("L", fmt.Sprintf("%s %s %s: %s", lang("CLIENT"), strCL(cl), lang("CONNECT"), infoJson))
+		logPrint("L", infoJson, strCL(cl), lang("CONNECT"))
 	}
 	// 设备断开连接
 	server.Events.OnDisconnect = func(cl events.Client, err error) {
 		logFileStr(true, strCL(cl), lang("DISCONNECT"), strings.ReplaceAll(fmt.Sprint(err), "\n", " "))
-		logPrint("D", fmt.Sprintf("%s %s %s: %v", lang("CLIENT"), strCL(cl), lang("DISCONNECT"), err))
+		logPrint("D", fmt.Sprintf("%v", err), strCL(cl), lang("DISCONNECT"))
 	}
 	// 收到订阅请求
 	server.Events.OnSubscribe = func(filter string, cl events.Client, qos byte) {
 		logFileStr(true, strCL(cl), lang("SUBSCRIBED"), fmt.Sprintf("%s (QOS%d)", filter, qos))
-		logPrint("S", fmt.Sprintf("%s %s %s %s, (QOS:%v)", lang("CLIENT"), strCL(cl), lang("SUBSCRIBED"), filter, qos))
+		logPrint("S", fmt.Sprintf("%s (QOS:%v)", lang("SUBSCRIBED"), qos), strCL(cl), filter)
 	}
 	// 收到取消订阅请求
 	server.Events.OnUnsubscribe = func(filter string, cl events.Client) {
 		logFileStr(true, strCL(cl), lang("UNSUBSCRIBED"), filter)
-		logPrint("U", fmt.Sprintf("%s %s %s %s", lang("CLIENT"), strCL(cl), lang("UNSUBSCRIBED"), filter))
+		logPrint("U", lang("UNSUBSCRIBED"), strCL(cl), filter)
 	}
 	// 收到消息
 	server.Events.OnMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {
@@ -272,15 +272,15 @@ func main() {
 			}
 		}
 		logFileStr(false, strCL(cl), *topic, payload)
-		logPrint("M", fmt.Sprintf("%s: %s, %s: %s, %s: %s", lang("MESSAGE"), strCL(cl), lang("TOPIC"), *topic, lang("PAYLOAD"), payload)) // 收到消息，发件人...
+		logPrint("M", payload, strCL(cl), *topic) // 收到消息，发件人...
 		return pk, nil
 	}
 	// 启动完毕
-	logPrint("I", lang("BOOTOK"))
+	logPrint("I", lang("BOOTOK"), listen)
 	// 处理结束信号
 	<-done
 	close(done)
-	logPrint("X", lang("NEEDSTOP"))
+	logPrint("X", lang("NEEDSTOP"), listen)
 	server.Close()
 	if logFileE {
 		logFileF.Close()
