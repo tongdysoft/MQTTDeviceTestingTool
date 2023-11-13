@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -16,10 +17,10 @@ import (
 	"strings"
 	"syscall"
 
-	mqtt "github.com/mochi-co/mqtt/server"
-	"github.com/mochi-co/mqtt/server/events"
-	"github.com/mochi-co/mqtt/server/listeners"
-	"github.com/mochi-co/mqtt/server/listeners/auth"
+	mqtt "github.com/mochi-mqtt/server/v2"
+	"github.com/mochi-mqtt/server/v2/hooks/auth"
+	"github.com/mochi-mqtt/server/v2/listeners"
+	"github.com/mochi-mqtt/server/v2/packets"
 )
 
 var (
@@ -37,27 +38,65 @@ var (
 	logDataF      *os.File
 	logStatusF    *os.File
 	monochrome    bool = false
+
+	onlyIdE      bool     = false // 只允许这些客户端 ID
+	onlyTopicE   bool     = false // 只允许这些主题
+	onlyPayloadE bool     = false // 只允许这些消息内容
+	onlyIdS      []string = []string{}
+	onlyTopicS   []string = []string{}
+	onlyPayloadS []string = []string{}
 )
+
+type MQTTHookOptions struct {
+	Server *mqtt.Server
+}
+type MQTTHook struct {
+	mqtt.HookBase
+	config *MQTTHookOptions
+}
+
+func (h *MQTTHook) ID() string {
+	return "events-example"
+}
+
+func (h *MQTTHook) Provides(b byte) bool {
+	return bytes.Contains([]byte{
+		mqtt.OnConnect,
+		mqtt.OnDisconnect,
+		mqtt.OnSubscribed,
+		mqtt.OnUnsubscribed,
+		mqtt.OnPublished,
+		mqtt.OnPublish,
+	}, []byte{b})
+}
+
+func (h *MQTTHook) Init(config any) error {
+	h.Log.Info("initialised")
+	if _, ok := config.(*MQTTHookOptions); !ok && config != nil {
+		return mqtt.ErrInvalidConfigType
+	}
+
+	h.config = config.(*MQTTHookOptions)
+	if h.config.Server == nil {
+		return mqtt.ErrInvalidConfigType
+	}
+	return nil
+}
 
 func main() {
 	go http.ListenAndServe(":9999", nil)
 	var (
-		version      string = "1.3.2"
+		version      string = "1.5.0"
 		versionView  bool   = false
 		listen       string
 		onlyID       string
 		onlyTopic    string
 		onlyPayload  string
-		onlyIdE      bool     = false
-		onlyTopicE   bool     = false
-		onlyPayloadE bool     = false
-		onlyIdS      []string = []string{}
-		onlyTopicS   []string = []string{}
-		onlyPayloadS []string = []string{}
 		certCA       string
 		certCert     string
 		certKey      string
 		certPassword string
+		useTLS       bool = false
 	)
 	// 初始化启动参数
 	flag.BoolVar(&versionView, "v", false, "Print version info")
@@ -111,7 +150,6 @@ func main() {
 	// 加载 SSL 证书
 	tlsConfig := &tls.Config{}
 	certPool := x509.NewCertPool()
-	var useTLS bool = false
 	if len(certCA) > 0 {
 		contentC, err := os.ReadFile(certCA)
 		if err != nil {
@@ -127,8 +165,8 @@ func main() {
 			ClientCAs:  certPool,
 			ClientAuth: tls.RequireAndVerifyClientCert,
 		}
-		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("CACERT"), certCA, len(contentC)))
 		useTLS = true
+		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("CACERT"), certCA, len(contentC)))
 	}
 	if len(certCert) > 0 && len(certKey) == 0 {
 		logPrint("X", fmt.Sprintf("%s%s: %s", lang("SERVERKEY"), lang("ERROR"), lang("NOTEMPTY")))
@@ -165,44 +203,59 @@ func main() {
 				Certificates: []tls.Certificate{cert},
 			}
 		}
-		useTLS = true
 	}
 	if len(certPassword) > 0 {
 		logPrint("C", fmt.Sprintf("%s: (%d)", lang("SERVERKEYPWD"), len(certPassword)))
 	}
 	// 初始化 MQTT 服务器
 	logPrint("I", lang("BOOTING"), listen)
-	server := mqtt.NewServer(nil)
-	tcp := listeners.NewTCP(listen, listen)
-	err := error(nil)
-	var conf listeners.Config = listeners.Config{}
-	if useTLS {
-		if len(userFile) > 0 {
-			conf = listeners.Config{
-				Auth:      loadUserAuthFile(userFile),
-				TLSConfig: tlsConfig,
-			}
-		} else {
-			conf = listeners.Config{
-				Auth:      new(auth.Allow),
-				TLSConfig: tlsConfig,
-			}
-		}
-	} else {
-		if len(userFile) > 0 {
-			conf = listeners.Config{
-				Auth: loadUserAuthFile(userFile),
-			}
-		} else {
-			conf = listeners.Config{
-				Auth: new(auth.Allow),
-			}
+	server := mqtt.New(nil)
+	var userDataDefault string = `
+auth:
+    - allow: true
+acl:
+    - filters:
+        '#': 3
+`
+	var err error = nil
+	var userData []byte = []byte(userDataDefault)
+	if len(userFile) > 0 {
+		userData, err = os.ReadFile(userFile)
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
-	err = server.AddListener(tcp, &conf)
+	err = server.AddHook(new(auth.Hook), &auth.Options{
+		Data: userData, // 从字节数组（文件二进制）读取规则：yaml 或 json
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
+	var tcp *listeners.TCP
+	if useTLS {
+		tcp = listeners.NewTCP(listen, listen, &listeners.Config{
+			TLSConfig: tlsConfig,
+		})
+	} else {
+		tcp = listeners.NewTCP(listen, listen, nil)
+	}
+	err = server.AddListener(tcp)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// err = server.AddListener(tcp, &conf)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	err = server.AddHook(new(MQTTHook), &MQTTHookOptions{
+		Server: server,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// 启动 MQTT 服务器
 	go func() {
 		err := server.Serve()
@@ -215,66 +268,19 @@ func main() {
 	// 	return pkx, err
 	// }
 	// 设备连接出错
-	server.Events.OnError = func(cl events.Client, err error) {
-		logPrint("D", fmt.Sprintf("%v", err), strCL(cl))
-	}
+	// server.Events.OnError = func(cl events.Client, err error) {
+	// 	logPrint("D", fmt.Sprintf("%v", err), strCL(cl))
+	// }
 	// 有设备连接到服务器
-	server.Events.OnConnect = func(cl events.Client, pk events.Packet) {
-		pkJsonB, err := json.Marshal(pk)
-		if err != nil {
-			pkJsonB = []byte("")
-		}
-		clJsonB, err := json.Marshal(cl)
-		if err != nil {
-			clJsonB = []byte("")
-		}
-		var infoJson string = fmt.Sprintf("{\"Client\":%s,\"Packet\":%s}", string(clJsonB), string(pkJsonB))
-		logFileStr(true, strCL(cl), lang("CONNECT"), strings.ReplaceAll(infoJson, "\"", "'"))
-		logPrint("L", infoJson, strCL(cl), lang("CONNECT"))
-	}
+	// server.Events.OnConnect = func(cl events.Client, pk events.Packet) {}
 	// 设备断开连接
-	server.Events.OnDisconnect = func(cl events.Client, err error) {
-		logFileStr(true, strCL(cl), lang("DISCONNECT"), strings.ReplaceAll(fmt.Sprint(err), "\n", " "))
-		logPrint("D", fmt.Sprintf("%v", err), strCL(cl), lang("DISCONNECT"))
-	}
+	// server.Events.OnDisconnect = func(cl events.Client, err error) {}
 	// 收到订阅请求
-	server.Events.OnSubscribe = func(filter string, cl events.Client, qos byte) {
-		logFileStr(true, strCL(cl), lang("SUBSCRIBED"), fmt.Sprintf("%s (QOS%d)", filter, qos))
-		logPrint("S", fmt.Sprintf("%s (QOS:%v)", lang("SUBSCRIBED"), qos), strCL(cl), filter)
-	}
+	// server.Events.OnSubscribe = func(filter string, cl events.Client, qos byte) {}
 	// 收到取消订阅请求
-	server.Events.OnUnsubscribe = func(filter string, cl events.Client) {
-		logFileStr(true, strCL(cl), lang("UNSUBSCRIBED"), filter)
-		logPrint("U", lang("UNSUBSCRIBED"), strCL(cl), filter)
-	}
+	// server.Events.OnUnsubscribe = func(filter string, cl events.Client) {}
 	// 收到消息
-	server.Events.OnMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {
-		pkx = pk
-		var clID *string = &cl.ID
-		if onlyIdE && !in(&onlyIdS, clID) {
-			return
-		}
-		var topic *string = &pkx.TopicName
-		if onlyTopicE && !in(&onlyTopicS, topic) {
-			return
-		}
-		var payload string = string(pkx.Payload)
-		if onlyPayloadE {
-			var inWord bool = false
-			for _, word := range onlyPayloadS {
-				if strings.Contains(payload, word) {
-					inWord = true
-					break
-				}
-			}
-			if !inWord {
-				return
-			}
-		}
-		logFileStr(false, strCL(cl), *topic, payload)
-		logPrint("M", payload, strCL(cl), *topic) // 收到消息，发件人...
-		return pk, nil
-	}
+	// server.Events.OnMessage = func(cl events.Client, pk events.Packet) (pkx events.Packet, err error) {}
 	// 启动完毕
 	logPrint("I", lang("BOOTOK"), listen)
 	// 处理结束信号
@@ -294,6 +300,70 @@ func main() {
 	logPrint("I", lang("END"))
 	os.Exit(0)
 }
+
+/* subscribe 回调处理订阅主题的消息
+func (h *MQTTHook) subscribeCallback(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
+	var clID *string = &cl.ID
+	if onlyIdE && !in(&onlyIdS, clID) {
+		return
+	}
+	var topic *string = &pk.TopicName
+	if onlyTopicE && !in(&onlyTopicS, topic) {
+		return
+	}
+	var payload string = string(pk.Payload)
+	if onlyPayloadE {
+		var inWord bool = false
+		for _, word := range onlyPayloadS {
+			if strings.Contains(payload, word) {
+				inWord = true
+				break
+			}
+		}
+		if !inWord {
+			return
+		}
+	}
+	logFileStr(false, strCL(cl), *topic, payload)
+	logPrint("M", payload, strCL(cl), *topic)
+} */
+
+// 有设备连接到服务器
+func (h *MQTTHook) OnConnect(cl *mqtt.Client, pk packets.Packet) error {
+	// h.config.Server.Subscribe("/themename", 1, h.subscribeCallback)
+	pkJsonB, err := json.Marshal(pk)
+	if err != nil {
+		pkJsonB = []byte("")
+	}
+	clJsonB, err := json.Marshal(cl)
+	if err != nil {
+		clJsonB = []byte("")
+	}
+	var infoJson string = fmt.Sprintf("{\"Client\":%s,\"Packet\":%s}", string(clJsonB), string(pkJsonB))
+	logFileStr(true, strCL(cl), lang("CONNECT"), strings.ReplaceAll(infoJson, "\"", "'"))
+	logPrint("L", infoJson, strCL(cl), lang("CONNECT"))
+	return nil
+}
+
+// 设备断开连接
+func (h *MQTTHook) OnDisconnect(cl *mqtt.Client, err error, expire bool) {
+	logFileStr(true, strCL(cl), lang("DISCONNECT"), strings.ReplaceAll(fmt.Sprint(err), "\n", " "))
+	logPrint("D", fmt.Sprintf("%v", err), strCL(cl), lang("DISCONNECT"))
+}
+
+// 收到订阅请求
+func (h *MQTTHook) OnSubscribed(cl *mqtt.Client, pk packets.Packet, reasonCodes []byte) {
+	logFileStr(true, strCL(cl), lang("SUBSCRIBED"), fmt.Sprintf("%s (QOS%d)", pk.TopicName, pk.FixedHeader.Qos))
+	logPrint("S", fmt.Sprintf("%s (QOS:%v)", lang("SUBSCRIBED"), pk.FixedHeader.Qos), strCL(cl), pk.TopicName)
+}
+
+// 收到取消订阅请求
+func (h *MQTTHook) OnUnsubscribed(cl *mqtt.Client, pk packets.Packet) {
+	logFileStr(true, strCL(cl), lang("UNSUBSCRIBED"), pk.TopicName)
+	logPrint("U", lang("UNSUBSCRIBED"), strCL(cl), pk.TopicName)
+}
+
+// func (h *MQTTHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, error) {}
 
 func in(strArr *[]string, str *string) bool {
 	sort.Strings(*strArr)

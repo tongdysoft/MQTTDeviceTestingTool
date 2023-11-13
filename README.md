@@ -6,7 +6,7 @@
 
 This tool can help you test the stability of your device's MQTT connection.
 
-- version: `1.3.2`
+- version: `1.5.0`
 - golang version: `1.20.6`
 
 ## Function
@@ -139,7 +139,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
-- 版本: `1.3.2`
+- 版本: `1.5.0`
 - golang 版本: `1.20.6`
 
 ## 功能

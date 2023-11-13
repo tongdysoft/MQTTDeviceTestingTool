@@ -1,0 +1,5 @@
+auth:
+    - allow: true
+acl:
+    - filters:
+        '#': 3

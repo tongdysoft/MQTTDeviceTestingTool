@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/logrusorgru/aurora"
-	"github.com/mochi-co/mqtt/server/events"
+	mqtt "github.com/mochi-mqtt/server/v2"
 )
 
 func logInit(listen string, soft string) {
@@ -129,10 +129,10 @@ func logFileStr(isStatus bool, infos ...string) {
 	}
 }
 
-func strCL(cl events.Client) string {
-	var userName string = string(cl.Username)
+func strCL(cl *mqtt.Client) string {
+	var userName string = string(cl.Properties.Username)
 	if len(userName) > 0 {
 		userName += "@"
 	}
-	return fmt.Sprintf("%s%s(%s)", userName, cl.ID, cl.Remote)
+	return fmt.Sprintf("%s%s(%s)", userName, cl.ID, cl.Net.Remote)
 }
