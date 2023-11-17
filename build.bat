@@ -1,8 +1,9 @@
 SET NAME=MqttClientTestTool
-SET NAMEV=%NAME%_v1.5.0_
+SET NAMEV=%NAME%_v1.5.1_
 MD bin
 DEL /Q bin\*
 COPY InteractiveMode*.bat bin\
+COPY OneKeyStart*.bat bin\
 COPY README.md bin\
 SET CGO_ENABLED=0
 SET GOARCH=amd64
@@ -42,13 +43,13 @@ SET GOOS=linux
 go build -o bin\%NAMEV%Linux32 .
 @REM xz -z -e -9 -T 0 -v bin/*
 cd bin
-dir /b *Windows32*.exe InteractiveMode*.bat README.md >l.txt
+dir /b *Windows32*.exe InteractiveMode*.bat OneKeyStart*.bat README.md >l.txt
 MAKECAB /F l.txt /D compressiontype=lzx /D compressionmemory=21 /D maxdisksize=1024000000
 MOVE disk1\1.cab %NAMEV%Windows32.cab
-dir /b *Windows64*.exe InteractiveMode*.bat README.md >l.txt
+dir /b *Windows64*.exe InteractiveMode*.bat OneKeyStart*.bat README.md >l.txt
 MAKECAB /F l.txt /D compressiontype=lzx /D compressionmemory=21 /D maxdisksize=1024000000
 MOVE disk1\1.cab %NAMEV%Windows64.cab
-dir /b *WindowsARM64*.exe InteractiveMode*.bat README.md >l.txt
+dir /b *WindowsARM64*.exe InteractiveMode*.bat OneKeyStart*.bat README.md >l.txt
 MAKECAB /F l.txt /D compressiontype=lzx /D compressionmemory=21 /D maxdisksize=1024000000
 MOVE disk1\1.cab %NAMEV%WindowsARM64.cab
 RD disk1

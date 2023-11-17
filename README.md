@@ -6,8 +6,8 @@
 
 This tool can help you test the stability of your device's MQTT connection.
 
-- version: `1.5.0`
-- golang version: `1.20.6`
+- version: `1.5.1`
+- golang version: `1.21`
 
 ## Function
 
@@ -21,8 +21,8 @@ Download the program from [Release](releases). No installation required.
 | ------------------------ | ------- | ----- | --- | ------------------- |
 | `bin/*_Linux32.zip`      | Linux   | 2.6   | 32  | i386 (x86)          |
 | `bin/*_Linux64.zip`      | Linux   | 2.6   | 64  | amd64(x86-64)       |
-| `bin/*_macOSI64.dmg`     | macOS   | 10.13 | 64  | amd64(x86-64)       |
-| `bin/*_macOSM64.dmg`     | macOS   | 11    | 64  | arm64(AppleSilicon) |
+| `bin/*_macOS64.dmg`      | macOS   | 10.13 | 64  | amd64(x86-64)       |
+| `bin/*_macOSARM64.dmg`   | macOS   | 11    | 64  | arm64(AppleSilicon) |
 | `bin/*_Windows32.cab`    | Windows | 7     | 32  | i386 (x86)          |
 | `bin/*_Windows64.cab`    | Windows | 7     | 64  | amd64(x86-64)       |
 | `bin/*_WindowsARM64.cab` | Windows | 10    | 64  | arm64(aarch64)      |
@@ -55,7 +55,7 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
   - Define listening on IP:Port (default: `0.0.0.0:1883` )
   - To allow all IP addresses: `:1883`
 - `-u path-string`
-  - [Users and permissions file](#examples-of-user-and-rights-profiles) (.json) path
+  - [Users and permissions file](#examples-of-user-and-rights-profiles) (.yaml/.json) path
 - `-ca path-string`
   - CA certificate file path
 - `-ce path-string`
@@ -85,19 +85,38 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
 
 ### Examples of User and Rights Profiles
 
-```json
-{
-  "Users": {
-    "userName1": "User1Password",
-    "userName2": "User2Password",
-    "userName3": "User3Password"
-  },
-  "AllowedTopics": {
-    "userName1": ["topic1", "topic2"],
-    "userName2": ["topic3"],
-    "userName3": ["topic4"]
-  }
-}
+```yaml
+auth:
+    - username: username1
+      password: password1
+      allow: true
+    - username: username2
+      password: password2
+      allow: false
+    - remote: 127.0.0.1:*
+      allow: true
+    - remote: localhost:*
+      allow: true
+acl:
+# 0 = deny, 1 = read only, 2 = write only, 3 = read and write
+    - remote: 127.0.0.1:*
+    - username: 用户名1
+      filters:
+        aaa/#: 3  # Topic:Permission
+        bbb/#: 2
+    - filters:
+        '#': 1
+        bbb/#: 0
+```
+
+Default configuration (all allowed):
+
+```yaml
+auth:
+    - allow: true
+acl:
+    - filters:
+        '#': 3
 ```
 
 ### macOS Config
@@ -107,6 +126,8 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
 1. Open the `.dmg` file of the corresponding platform in Release, find the `.app` file inside, and copy it to the `Applications` folder.
 2. Right click on the `.app` file and select `Show Package Contents`.
 3. Edit the `Contents/Resources/run.sh` script file, and add parameters at the comment position.
+
+The `Contents/Resources/MqttClientTestTool_macOS64` file can be extracted separately and run in the terminal.
 
 ## Build
 
@@ -139,8 +160,8 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
-- 版本: `1.5.0`
-- golang 版本: `1.20.6`
+- 版本: `1.5.1`
+- golang 版本: `1.21.5`
 
 ## 功能
 
@@ -154,8 +175,8 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 | ------------------------ | ------- | ------ | --- | ------------------- |
 | `bin/*_Linux32.zip`      | Linux   | 2.6    | 32  | i386 (x86)          |
 | `bin/*_Linux64.zip`      | Linux   | 2.6    | 64  | amd64(x86-64)       |
-| `bin/*_macOSI64.dmg`     | macOS   | 10.13  | 64  | amd64(x86-64)       |
-| `bin/*_macOSM64.dmg`     | macOS   | 11     | 64  | arm64(AppleSilicon) |
+| `bin/*_macOS64.dmg`      | macOS   | 10.13  | 64  | amd64(x86-64)       |
+| `bin/*_macOSARM64.dmg`   | macOS   | 11     | 64  | arm64(AppleSilicon) |
 | `bin/*_Windows32.cab`    | Windows | 7      | 32  | i386 (x86)          |
 | `bin/*_Windows64.cab`    | Windows | 7      | 64  | amd64(x86-64)       |
 | `bin/*_WindowsARM64.cab` | Windows | 10     | 64  | arm64(aarch64)      |
@@ -188,7 +209,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
   - 指定要监听的地址和端口 (默认值: `0.0.0.0:1883` )
   - 如需允许所有 IP 地址： `:1883`
 - `-u 文件路径字符串`
-  - [用户和主题权限配置文件](#用户和主题权限配置文件示例) (.json) 路径
+  - [用户和主题权限配置文件](#用户和主题权限配置文件示例) (.yaml/.json) 路径
 - `-ca 文件路径字符串`
   - CA 证书文件路径
 - `-ce 文件路径字符串`
@@ -218,19 +239,38 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 ### 用户和主题权限配置文件示例
 
-```json
-{
-  "Users": {
-    "用户名1": "用户名1的密码",
-    "用户名2": "用户名2的密码",
-    "用户名3": "用户名3的密码"
-  },
-  "AllowedTopics": {
-    "用户名1": ["允许的主题1", "允许的主题2"],
-    "用户名2": ["允许的主题3"],
-    "用户名3": ["允许的主题4"]
-  }
-}
+```yaml
+auth:
+    - username: 用户名1
+      password: 密码1
+      allow: true
+    - username: 用户名2
+      password: 密码2
+      allow: false
+    - remote: 127.0.0.1:*
+      allow: true
+    - remote: localhost:*
+      allow: true
+acl:
+    # 0 = 封禁, 1 = 只读, 2 = 只写, 3 = 读写
+    - remote: 127.0.0.1:*
+    - username: 用户名1
+      filters:
+        aaa/#: 3  # 主题名称:权限 , # 是通配符
+        bbb/#: 2
+    - filters:
+        '#': 1
+        bbb/#: 0
+```
+
+默认配置（全部允许）：
+
+```yaml
+auth:
+    - allow: true
+acl:
+    - filters:
+        '#': 3
 ```
 
 ### macOS 系统中添加启动参数
@@ -239,9 +279,12 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 2. 右键点击改 `.app` 文件，选择 `显示包内容` 。
 3. 编辑 `Contents/Resources/run.sh` 脚本文件，在里面注释位置处添加参数。
 
+可以将 `Contents/Resources/MqttClientTestTool_macOS64` 文件单独提取出来在终端中运行。
+
 ### Windows 系统中使用中文交互模式
 
-可以将 `InteractiveModeCHS.bat` 和 exe 放在一起，双击启动中文交互模式，无需关心命令行参数书写。
+- 可以将 `InteractiveModeCHS.bat` 和 exe 放在一起，双击启动中文交互模式，无需关心命令行参数书写。
+- 可以将 `OneKeyStartCHS.bat` 和 exe 放在一起，双击直接一键启动中文版。
 
 ## 编译
 

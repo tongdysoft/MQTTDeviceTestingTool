@@ -22,14 +22,14 @@
         "Comments": "This tool can help you test the stability of your device's MQTT connection.",
         "CompanyName": "Tongdy",
         "FileDescription": "This tool can help you test the stability of your device's MQTT connection.",
-        "FileVersion": "1.5.0.0",
+        "FileVersion": "1.5.1.0",
         "InternalName": "mqtt-test-server",
         "LegalCopyright": "2022, Kagurazaka Yashi.",
         "LegalTrademarks": "Tongdy",
         "OriginalFilename": "main.exe",
         "PrivateBuild": "",
         "ProductName": "MQTT client test tool",
-        "ProductVersion": "1.5.0.0",
+        "ProductVersion": "1.5.1.0",
         "SpecialBuild": ""
     },
     "VarFileInfo": {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/logrusorgru/aurora"
 	mqtt "github.com/mochi-mqtt/server/v2"
+	"github.com/mochi-mqtt/server/v2/packets"
 )
 
 func logInit(listen string, soft string) {
@@ -102,6 +103,14 @@ func logPrint(iconChar string, text string, titleMore ...string) {
 		fmt.Print(log0)
 		fmt.Print(log1)
 	}
+}
+
+func pkFilters(pk packets.Subscriptions) string {
+	var filters []string
+	for _, filter := range pk {
+		filters = append(filters, string(filter.Filter))
+	}
+	return strings.Join(filters, ",")
 }
 
 func logFileStr(isStatus bool, infos ...string) {

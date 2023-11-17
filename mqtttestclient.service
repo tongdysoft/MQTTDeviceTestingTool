@@ -3,7 +3,7 @@ Description=MQTT Client Test Tool
 After=network.target
 
 [Service]
-ExecStart=/root/MqttClientTestTool_v1.5.0_Linux64
+ExecStart=/root/MqttClientTestTool_v1.5.1_Linux64
 WorkingDirectory=/root/
 Restart=always
 User=root

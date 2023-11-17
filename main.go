@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -39,9 +40,9 @@ var (
 	logStatusF    *os.File
 	monochrome    bool = false
 
-	onlyIdE      bool     = false // 只允许这些客户端 ID
-	onlyTopicE   bool     = false // 只允许这些主题
-	onlyPayloadE bool     = false // 只允许这些消息内容
+	onlyIdE      bool     = false
+	onlyTopicE   bool     = false
+	onlyPayloadE bool     = false
 	onlyIdS      []string = []string{}
 	onlyTopicS   []string = []string{}
 	onlyPayloadS []string = []string{}
@@ -56,7 +57,7 @@ type MQTTHook struct {
 }
 
 func (h *MQTTHook) ID() string {
-	return "events-example"
+	return "events"
 }
 
 func (h *MQTTHook) Provides(b byte) bool {
@@ -80,13 +81,14 @@ func (h *MQTTHook) Init(config any) error {
 	if h.config.Server == nil {
 		return mqtt.ErrInvalidConfigType
 	}
+	// h.config.Server.Subscribe("#", 1, h.subscribeCallback)
 	return nil
 }
 
 func main() {
 	go http.ListenAndServe(":9999", nil)
 	var (
-		version      string = "1.5.0"
+		version      string = "1.5.1"
 		versionView  bool   = false
 		listen       string
 		onlyID       string
@@ -209,7 +211,14 @@ func main() {
 	}
 	// 初始化 MQTT 服务器
 	logPrint("I", lang("BOOTING"), listen)
-	server := mqtt.New(nil)
+	var server *mqtt.Server = mqtt.New(nil)
+
+	level := new(slog.LevelVar)
+	server.Log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	}))
+	level.Set(slog.LevelError)
+
 	var userDataDefault string = `
 auth:
     - allow: true
@@ -226,7 +235,7 @@ acl:
 		}
 	}
 	err = server.AddHook(new(auth.Hook), &auth.Options{
-		Data: userData, // 从字节数组（文件二进制）读取规则：yaml 或 json
+		Data: userData, // 从字节数组（文件二进制）读取 yaml 或 json
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -243,7 +252,6 @@ acl:
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	// err = server.AddListener(tcp, &conf)
 	// if err != nil {
 	// 	log.Fatal(err)
@@ -301,36 +309,11 @@ acl:
 	os.Exit(0)
 }
 
-/* subscribe 回调处理订阅主题的消息
-func (h *MQTTHook) subscribeCallback(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
-	var clID *string = &cl.ID
-	if onlyIdE && !in(&onlyIdS, clID) {
-		return
-	}
-	var topic *string = &pk.TopicName
-	if onlyTopicE && !in(&onlyTopicS, topic) {
-		return
-	}
-	var payload string = string(pk.Payload)
-	if onlyPayloadE {
-		var inWord bool = false
-		for _, word := range onlyPayloadS {
-			if strings.Contains(payload, word) {
-				inWord = true
-				break
-			}
-		}
-		if !inWord {
-			return
-		}
-	}
-	logFileStr(false, strCL(cl), *topic, payload)
-	logPrint("M", payload, strCL(cl), *topic)
-} */
+// subscribe 回调处理订阅主题的消息
+// func (h *MQTTHook) subscribeCallback(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {}
 
 // 有设备连接到服务器
 func (h *MQTTHook) OnConnect(cl *mqtt.Client, pk packets.Packet) error {
-	// h.config.Server.Subscribe("/themename", 1, h.subscribeCallback)
 	pkJsonB, err := json.Marshal(pk)
 	if err != nil {
 		pkJsonB = []byte("")
@@ -353,17 +336,43 @@ func (h *MQTTHook) OnDisconnect(cl *mqtt.Client, err error, expire bool) {
 
 // 收到订阅请求
 func (h *MQTTHook) OnSubscribed(cl *mqtt.Client, pk packets.Packet, reasonCodes []byte) {
-	logFileStr(true, strCL(cl), lang("SUBSCRIBED"), fmt.Sprintf("%s (QOS%d)", pk.TopicName, pk.FixedHeader.Qos))
-	logPrint("S", fmt.Sprintf("%s (QOS:%v)", lang("SUBSCRIBED"), pk.FixedHeader.Qos), strCL(cl), pk.TopicName)
+	logFileStr(true, strCL(cl), lang("SUBSCRIBED"), fmt.Sprintf("%s (QOS%d)", pkFilters(pk.Filters), pk.FixedHeader.Qos))
+	logPrint("S", fmt.Sprintf("%s (QOS:%v)", lang("SUBSCRIBED"), pk.FixedHeader.Qos), strCL(cl), pkFilters(pk.Filters))
 }
 
 // 收到取消订阅请求
 func (h *MQTTHook) OnUnsubscribed(cl *mqtt.Client, pk packets.Packet) {
-	logFileStr(true, strCL(cl), lang("UNSUBSCRIBED"), pk.TopicName)
-	logPrint("U", lang("UNSUBSCRIBED"), strCL(cl), pk.TopicName)
+	logFileStr(true, strCL(cl), lang("UNSUBSCRIBED"), pkFilters(pk.Filters))
+	logPrint("U", lang("UNSUBSCRIBED"), strCL(cl), pkFilters(pk.Filters))
 }
 
-// func (h *MQTTHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, error) {}
+// 客户端发送消息时
+func (h *MQTTHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, error) {
+	var clID *string = &cl.ID
+	if onlyIdE && !in(&onlyIdS, clID) {
+		return pk, nil
+	}
+	var topic *string = &pk.TopicName
+	if onlyTopicE && !in(&onlyTopicS, topic) {
+		return pk, nil
+	}
+	var payload string = string(pk.Payload)
+	if onlyPayloadE {
+		var inWord bool = false
+		for _, word := range onlyPayloadS {
+			if strings.Contains(payload, word) {
+				inWord = true
+				break
+			}
+		}
+		if !inWord {
+			return pk, nil
+		}
+	}
+	logFileStr(false, strCL(cl), *topic, payload)
+	logPrint("M", payload, strCL(cl), *topic)
+	return pk, nil
+}
 
 func in(strArr *[]string, str *string) bool {
 	sort.Strings(*strArr)
