@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/logrusorgru/aurora"
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/packets"
@@ -79,29 +80,69 @@ func logPrint(iconChar string, text string, titleMore ...string) {
 	}
 	switch iconChar {
 	case "M": // 信息
-		fmt.Print(aurora.BgBrightBlack(log0))
-		fmt.Print(aurora.White(log1))
+		if isWindows {
+			color.New(color.BgWhite, color.FgBlack).Print(log0)
+			color.New(color.BgBlack, color.FgWhite).Print(log1)
+		} else {
+			fmt.Print(aurora.BgWhite(aurora.Black(log0)))
+			fmt.Print(aurora.BgBlack(aurora.White(log1)))
+		}
 	case "C": // 配置
-		fmt.Print(aurora.BgMagenta(log0))
-		fmt.Print(aurora.Magenta(log1))
+		if isWindows {
+			color.New(color.BgMagenta, color.FgWhite).Print(log0)
+			color.New(color.BgBlack, color.FgMagenta).Print(log1)
+		} else {
+			fmt.Print(aurora.BgMagenta(aurora.White(log0)))
+			fmt.Print(aurora.BgBlack(aurora.Magenta(log1)))
+		}
 	case "L": // 连接
-		fmt.Print(aurora.BgGreen(log0))
-		fmt.Print(aurora.Green(log1))
+		if isWindows {
+			color.New(color.BgGreen, color.FgBlack).Print(log0)
+			color.New(color.BgBlack, color.FgGreen).Print(log1)
+		} else {
+			fmt.Print(aurora.BgGreen(aurora.Black(log0)))
+			fmt.Print(aurora.BgBlack(aurora.Green(log1)))
+		}
 	case "D": // 断开
-		fmt.Print(aurora.BgRed(log0))
-		fmt.Print(aurora.Red(log1))
+		if isWindows {
+			color.New(color.BgRed, color.FgWhite).Print(log0)
+			color.New(color.BgBlack, color.FgRed).Print(log1)
+		} else {
+			fmt.Print(aurora.BgRed(aurora.White(log0)))
+			fmt.Print(aurora.BgBlack(aurora.Red(log1)))
+		}
 	case "S": // 订阅
-		fmt.Print(aurora.BgCyan(log0))
-		fmt.Print(aurora.Cyan(log1))
+		if isWindows {
+			color.New(color.BgCyan, color.FgBlack).Print(log0)
+			color.New(color.BgBlack, color.FgCyan).Print(log1)
+		} else {
+			fmt.Print(aurora.BgCyan(aurora.Black(log0)))
+			fmt.Print(aurora.BgBlack(aurora.Cyan(log1)))
+		}
 	case "U": // 取消订阅
-		fmt.Print(aurora.BgYellow(log0))
-		fmt.Print(aurora.Yellow(log1))
+		if isWindows {
+			color.New(color.BgYellow, color.FgBlack).Print(log0)
+			color.New(color.BgBlack, color.FgYellow).Print(log1)
+		} else {
+			fmt.Print(aurora.BgYellow(aurora.Black(log0)))
+			fmt.Print(aurora.BgBlack(aurora.Yellow(log1)))
+		}
 	case "X": // 错误
-		fmt.Print(aurora.BgRed(log0))
-		fmt.Print(aurora.Red(log1))
+		if isWindows {
+			color.New(color.BgRed, color.FgWhite).Print(log0)
+			color.New(color.BgBlack, color.FgRed).Print(log1)
+		} else {
+			fmt.Print(aurora.BgRed(aurora.White(log0)))
+			fmt.Print(aurora.BgBlack(aurora.Red(log1)))
+		}
 	default:
-		fmt.Print(log0)
-		fmt.Print(log1)
+		if isWindows {
+			color.New(color.Reset).Print(log0)
+			fmt.Print(log1)
+		} else {
+			fmt.Print(log0)
+			fmt.Print(log1)
+		}
 	}
 }
 

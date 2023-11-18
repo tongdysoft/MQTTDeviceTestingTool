@@ -13,7 +13,7 @@ SET ca=
 SET ce=
 SET ck=
 SET cp=
-SET vn=YES
+SET vn=NO
 
 :START
 TITLE MQTT 客户端测试工具
@@ -41,7 +41,7 @@ ECHO [10] 只有消息内容包含这些关键词才会处理: %vw%
 ECHO [11] 将收取到的消息保存到 .csv 文件路径: %vm%
 ECHO [12] 将客户端状态变化保存到 .csv 文件路径: %vs%
 ECHO [13] 将日志输出保存到 .log 文件路径: %vo%
-ECHO [14] 单色模式输出(非普通 cmd 建议关闭): %vn%
+ECHO [14] 单色模式输出: %vn%
 ECHO --------------------------------------------------
 ECHO [Y] 启动 MQTT 服务器
 ECHO [H] 获取帮助

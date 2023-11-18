@@ -14,6 +14,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -39,6 +40,7 @@ var (
 	logDataF      *os.File
 	logStatusF    *os.File
 	monochrome    bool = false
+	isWindows     bool = runtime.GOOS == "windows"
 
 	onlyIdE      bool     = false
 	onlyTopicE   bool     = false
@@ -102,7 +104,7 @@ func main() {
 	)
 	// 初始化启动参数
 	flag.BoolVar(&versionView, "v", false, "Print version info")
-	flag.StringVar(&language, "l", "en", "Language ( en(default) | cn )")
+	flag.StringVar(&language, "l", "auto", "Language ( en | cn )")
 	flag.StringVar(&listen, "p", "0.0.0.0:1883", "Define listening on IP:Port (default: 0.0.0.0:1883 )")
 	flag.StringVar(&onlyID, "c", "", "Only allow these client IDs (comma separated)")
 	flag.StringVar(&onlyTopic, "t", "", "Only allow these topics (comma separated)")
@@ -118,7 +120,7 @@ func main() {
 	flag.StringVar(&certKey, "ck", "", "Server key file path")
 	flag.StringVar(&certPassword, "cp", "", "Server key file password")
 	flag.Parse()
-	logPrint("I", lang("TITLE")+" v"+version+" (KagurazakaYashi@Tongdy, 2023)")
+	logPrint("I", lang("TITLE")+" v"+version+" for "+runtime.GOOS+" (KagurazakaYashi@Tongdy, 2023)")
 	logPrint("I", lang("HELP")+" https://github.com/tongdysoft/mqtt-test-server")
 	// 初始化设置
 	if versionView {
