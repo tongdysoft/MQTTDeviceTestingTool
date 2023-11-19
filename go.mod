@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 )

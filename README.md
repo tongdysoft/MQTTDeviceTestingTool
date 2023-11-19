@@ -6,7 +6,7 @@
 
 This tool can help you test the stability of your device's MQTT connection.
 
-- version: `1.5.1`
+- version: `1.5.3`
 - golang version: `1.21`
 
 ## Function
@@ -119,9 +119,11 @@ acl:
         '#': 3
 ```
 
-### macOS Config
+### Use in macOS
 
-### Add startup parameters in macOS system
+Before running this `.app` program directly, make sure that `Terminal.app` is in an exited state.
+
+#### Add startup parameters in macOS system
 
 1. Open the `.dmg` file of the corresponding platform in Release, find the `.app` file inside, and copy it to the `Applications` folder.
 2. Right click on the `.app` file and select `Show Package Contents`.
@@ -160,7 +162,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
-- 版本: `1.5.1`
+- 版本: `1.5.3`
 - golang 版本: `1.21.5`
 
 ## 功能
@@ -273,7 +275,13 @@ acl:
         '#': 3
 ```
 
-### macOS 系统中添加启动参数
+### 在 macOS 中使用
+
+在直接运行该 `.app` 程序之前，请确保 `终端.app` 处于退出状态。
+
+#### 添加启动参数
+
+在直接运行该 `.app` 程序之前，请确保 `终端.app` 处于退出状态。
 
 1. 打开 Release 中的相应平台的 `.dmg` 文件，找到里面的 `.app` 文件，将其复制到 `应用程序` 文件夹.
 2. 右键点击改 `.app` 文件，选择 `显示包内容` 。
@@ -283,8 +291,7 @@ acl:
 
 ### Windows 系统中使用中文交互模式
 
-- 可以将 `InteractiveModeCHS.bat` 和 exe 放在一起，双击启动中文交互模式，无需关心命令行参数书写。
-- 可以将 `OneKeyStartCHS.bat` 和 exe 放在一起，双击直接一键启动中文版。
+可以将 `InteractiveModeCHS.bat` 和 exe 放在一起，双击启动中文交互模式，无需关心命令行参数书写。
 
 ## 编译
 

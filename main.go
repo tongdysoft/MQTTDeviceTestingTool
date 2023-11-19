@@ -19,6 +19,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/cloudfoundry/jibber_jabber"
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
 	"github.com/mochi-mqtt/server/v2/listeners"
@@ -120,6 +121,15 @@ func main() {
 	flag.StringVar(&certKey, "ck", "", "Server key file path")
 	flag.StringVar(&certPassword, "cp", "", "Server key file password")
 	flag.Parse()
+	if language == "auto" {
+		language = "en"
+		syslang, _ := jibber_jabber.DetectIETF()
+		if len(syslang) > 0 {
+			if strings.Contains(syslang, "zh") {
+				language = "cn"
+			}
+		}
+	}
 	logPrint("I", lang("TITLE")+" v"+version+" for "+runtime.GOOS+" (KagurazakaYashi@Tongdy, 2023)")
 	logPrint("I", lang("HELP")+" https://github.com/tongdysoft/mqtt-test-server")
 	// 初始化设置
