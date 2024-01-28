@@ -49,6 +49,8 @@ var (
 	onlyIdS      []string = []string{}
 	onlyTopicS   []string = []string{}
 	onlyPayloadS []string = []string{}
+
+	clientAuthType []tls.ClientAuthType = []tls.ClientAuthType{tls.NoClientCert, tls.RequestClientCert, tls.RequireAnyClientCert, tls.VerifyClientCertIfGiven, tls.RequireAndVerifyClientCert}
 )
 
 type MQTTHookOptions struct {
@@ -91,17 +93,18 @@ func (h *MQTTHook) Init(config any) error {
 func main() {
 	go http.ListenAndServe(":9999", nil)
 	var (
-		version      string = "1.5.1"
-		versionView  bool   = false
-		listen       string
-		onlyID       string
-		onlyTopic    string
-		onlyPayload  string
-		certCA       string
-		certCert     string
-		certKey      string
-		certPassword string
-		useTLS       bool = false
+		version        string = "1.5.1"
+		versionView    bool   = false
+		listen         string
+		onlyID         string
+		onlyTopic      string
+		onlyPayload    string
+		certCA         string
+		certCert       string
+		certKey        string
+		certPassword   string
+		useTLS         bool = false
+		certClientAuth int  = 0
 	)
 	// 初始化启动参数
 	flag.BoolVar(&versionView, "v", false, "Print version info")
@@ -120,6 +123,7 @@ func main() {
 	flag.StringVar(&certCert, "ce", "", "Server certificate file path")
 	flag.StringVar(&certKey, "ck", "", "Server key file path")
 	flag.StringVar(&certPassword, "cp", "", "Server key file password")
+	flag.IntVar(&certClientAuth, "cv", 0, "Policy the server will follow for TLS Client Authentication")
 	flag.Parse()
 	if language == "auto" {
 		language = "en"
@@ -175,9 +179,10 @@ func main() {
 			logPrint("X", fmt.Sprintf("%s%s: %s (%d)", lang("CACERT"), lang("ERROR"), certCA, len(contentC)))
 			return
 		}
+
 		tlsConfig = &tls.Config{
 			ClientCAs:  certPool,
-			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientAuth: clientAuthType[certClientAuth],
 		}
 		useTLS = true
 		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("CACERT"), certCA, len(contentC)))

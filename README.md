@@ -47,7 +47,7 @@ Non-Windows systems need to use `chmod +x <executable file name>` to add permiss
 
 ## Usage
 
-Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
+Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | cv .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
 
 - `-l string`
   - Language ( `en(default) | cn` )
@@ -64,6 +64,13 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
   - Server key file path
 - `-cp string`
   - Server key file password
+- `-cv number (0-4)`
+  - Policy the server will follow for TLS Client Authentication:
+    0. NoClientCert: Indicates that no client certificate should be requested during the handshake, and if any certificates are sent they will not be verified.
+    1. RequestClientCert: Indicates that a client certificate should be requested during the handshake, but does not require that the client send any certificates.
+    2. RequireAnyClientCert: Indicates that a client certificate should be requested during the handshake, and that at least one certificate is required to be sent by the client, but that certificate is not required to be valid.
+    3. VerifyClientCertIfGiven: Indicates that a client certificate should be requested during the handshake, but does not require that the client sends a certificate. If the client does send a certificate it is required to be valid.
+    4. RequireAndVerifyClientCert: Indicates that a client certificate should be requested during the handshake, and that at least one valid certificate is required to be sent by the client.
 - `-c string`
   - Only allow these client IDs ( `,` separated)
 - `-t string`
@@ -203,7 +210,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 ## 使用说明
 
-命令行参数: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
+命令行参数: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -cv .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
 
 - `-l 字符串`
   - 语言 ( `en(英语,默认) | cn(简体中文)` )
@@ -220,6 +227,13 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
   - 服务器私钥文件路径
 - `-cp 字符串`
   - 服务器私钥文件的密码
+- `-cv 数字 (0-4)`
+  - TLS 客户端身份验证策略:
+    0. 无客户端证书: 表示握手期间不应请求客户端证书，如果发送任何证书，则不会对其进行验证。
+    1. 请求客户端证书: 表示在握手期间应请求客户端证书，但不要求客户端发送任何证书。
+    2. 需要任何客户端证书: 表示握手期间应请求客户端证书，并且客户端至少需要发送一个证书，但不要求该证书有效。
+    3. 验证客户端证书是否已给出: 表示握手期间应请求客户端证书，但不要求客户端发送证书。如果客户端确实发送了证书，则该证书必须有效。
+    4. 需要并验证客户端证书: 表示握手时需要请求客户端证书，并且客户端至少需要发送一个有效的证书。
 - `-c 字符串`
   - 只允许客户端 ID 为这些的客户端（使用 `,` 分隔）
 - `-t 字符串`
