@@ -27,6 +27,7 @@ var langs map[string][]string = map[string][]string{
 	"SERVERCERT":      {"server certificate", "服务器证书"},
 	"SERVERKEY":       {"server key", "服务器私钥"},
 	"SERVERKEYPWD":    {"server key password", "服务器私钥的密码"},
+	"VERIFYCERT":      {"Client certificate verification mode", "客户端证书验证模式"},
 	"NOTEMPTY":        {"can not be empty", "不能为空"},
 	"FAIL":            {" failed", "失败"},
 	"ERROR":           {" error", "错误"},

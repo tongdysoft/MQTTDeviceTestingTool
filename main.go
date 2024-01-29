@@ -49,8 +49,6 @@ var (
 	onlyIdS      []string = []string{}
 	onlyTopicS   []string = []string{}
 	onlyPayloadS []string = []string{}
-
-	clientAuthType []tls.ClientAuthType = []tls.ClientAuthType{tls.NoClientCert, tls.RequestClientCert, tls.RequireAnyClientCert, tls.VerifyClientCertIfGiven, tls.RequireAndVerifyClientCert}
 )
 
 type MQTTHookOptions struct {
@@ -123,7 +121,7 @@ func main() {
 	flag.StringVar(&certCert, "ce", "", "Server certificate file path")
 	flag.StringVar(&certKey, "ck", "", "Server key file path")
 	flag.StringVar(&certPassword, "cp", "", "Server key file password")
-	flag.IntVar(&certClientAuth, "cv", 0, "Policy the server will follow for TLS Client Authentication")
+	flag.IntVar(&certClientAuth, "cv", -1, "Policy the server will follow for TLS Client Authentication")
 	flag.Parse()
 	if language == "auto" {
 		language = "en"
@@ -166,7 +164,8 @@ func main() {
 		close(sigs)
 	}()
 	// 加载 SSL 证书
-	tlsConfig := &tls.Config{}
+	var clientAuth tls.ClientAuthType = clientAuthDefault(certClientAuth, certCA, certCert)
+	tlsConfig := &tls.Config{ClientAuth: clientAuth}
 	certPool := x509.NewCertPool()
 	if len(certCA) > 0 {
 		contentC, err := os.ReadFile(certCA)
@@ -179,10 +178,9 @@ func main() {
 			logPrint("X", fmt.Sprintf("%s%s: %s (%d)", lang("CACERT"), lang("ERROR"), certCA, len(contentC)))
 			return
 		}
-
 		tlsConfig = &tls.Config{
 			ClientCAs:  certPool,
-			ClientAuth: clientAuthType[certClientAuth],
+			ClientAuth: clientAuth,
 		}
 		useTLS = true
 		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("CACERT"), certCA, len(contentC)))
@@ -391,6 +389,7 @@ func (h *MQTTHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet
 	return pk, nil
 }
 
+// 检查字符串是否包含于数组之中
 func in(strArr *[]string, str *string) bool {
 	sort.Strings(*strArr)
 	index := sort.SearchStrings(*strArr, *str)
@@ -398,4 +397,22 @@ func in(strArr *[]string, str *string) bool {
 		return true
 	}
 	return false
+}
+
+// 确定客户端证书验证模式
+func clientAuthDefault(certClientAuth int, certCA string, certCert string) tls.ClientAuthType {
+	var clientAuthType []tls.ClientAuthType = []tls.ClientAuthType{tls.NoClientCert, tls.RequestClientCert, tls.RequireAnyClientCert, tls.VerifyClientCertIfGiven, tls.RequireAndVerifyClientCert}
+	var isDefault bool = (certClientAuth == -1)
+	if (certClientAuth >= 0) && (certClientAuth < len(clientAuthType)) {
+	} else if len(certCA) == 0 || len(certCert) == 0 {
+		certClientAuth = 0 //tls.NoClientCert
+	} else if len(certCA) > 0 {
+		certClientAuth = 4 //tls.RequireAndVerifyClientCert
+	} else {
+		certClientAuth = 3 //tls.VerifyClientCertIfGiven
+	}
+	if !isDefault && certClientAuth != 0 {
+		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("VERIFYCERT"), clientAuthType[certClientAuth], certClientAuth))
+	}
+	return clientAuthType[certClientAuth]
 }

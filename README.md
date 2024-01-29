@@ -71,6 +71,10 @@ Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | c
     2. RequireAnyClientCert: Indicates that a client certificate should be requested during the handshake, and that at least one certificate is required to be sent by the client, but that certificate is not required to be valid.
     3. VerifyClientCertIfGiven: Indicates that a client certificate should be requested during the handshake, but does not require that the client sends a certificate. If the client does send a certificate it is required to be valid.
     4. RequireAndVerifyClientCert: Indicates that a client certificate should be requested during the handshake, and that at least one valid certificate is required to be sent by the client.
+  - default value:
+    - If no server certificate is given, the default value is `0`
+    - If at least a CA certificate is given, the default value is `4`
+    - If a server certificate is given, the default value is `3`
 - `-c string`
   - Only allow these client IDs ( `,` separated)
 - `-t string`
@@ -234,6 +238,10 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
     2. 需要任何客户端证书: 表示握手期间应请求客户端证书，并且客户端至少需要发送一个证书，但不要求该证书有效。
     3. 验证客户端证书是否已给出: 表示握手期间应请求客户端证书，但不要求客户端发送证书。如果客户端确实发送了证书，则该证书必须有效。
     4. 需要并验证客户端证书: 表示握手时需要请求客户端证书，并且客户端至少需要发送一个有效的证书。
+  - 默认值:
+    - 如果没有给予服务器证书，那么默认值是 `0`
+    - 如果至少给予了CA证书，那么默认值是 `4`
+    - 如果给予了服务器证书，那么默认值是 `3`
 - `-c 字符串`
   - 只允许客户端 ID 为这些的客户端（使用 `,` 分隔）
 - `-t 字符串`
