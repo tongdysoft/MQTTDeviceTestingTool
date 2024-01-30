@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -185,4 +186,13 @@ func strCL(cl *mqtt.Client) string {
 		userName += "@"
 	}
 	return fmt.Sprintf("%s%s(%s)", userName, cl.ID, cl.Net.Remote)
+}
+
+func in(strArr *[]string, str *string) bool {
+	sort.Strings(*strArr)
+	index := sort.SearchStrings(*strArr, *str)
+	if index < len(*strArr) && (*strArr)[index] == *str {
+		return true
+	}
+	return false
 }

@@ -45,3 +45,21 @@ func LoadCert(certPEMByte []byte, keyPEMByte []byte, password string) tls.Certif
 		return pem
 	}
 }
+
+// 确定客户端证书验证模式
+func clientAuthDefault(certClientAuth int, certCA string, certCert string) tls.ClientAuthType {
+	var clientAuthType []tls.ClientAuthType = []tls.ClientAuthType{tls.NoClientCert, tls.RequestClientCert, tls.RequireAnyClientCert, tls.VerifyClientCertIfGiven, tls.RequireAndVerifyClientCert}
+	var isDefault bool = (certClientAuth == -1)
+	if (certClientAuth >= 0) && (certClientAuth < len(clientAuthType)) {
+	} else if len(certCA) == 0 || len(certCert) == 0 {
+		certClientAuth = 0 //tls.NoClientCert
+	} else if len(certCA) > 0 {
+		certClientAuth = 4 //tls.RequireAndVerifyClientCert
+	} else {
+		certClientAuth = 3 //tls.VerifyClientCertIfGiven
+	}
+	if !isDefault && certClientAuth != 0 {
+		logPrint("C", fmt.Sprintf("%s: %s (%d)", lang("VERIFYCERT"), clientAuthType[certClientAuth], certClientAuth))
+	}
+	return clientAuthType[certClientAuth]
+}

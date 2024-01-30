@@ -1,5 +1,5 @@
 SET NAME=MqttClientTestTool
-SET NAMEV=%NAME%_v1.5.3_
+SET NAMEV=%NAME%_v1.5.5_
 MD bin
 DEL /Q bin\*
 COPY InteractiveMode*.bat bin\

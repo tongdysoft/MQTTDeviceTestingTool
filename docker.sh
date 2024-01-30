@@ -1,4 +1,4 @@
-unzip MqttClientTestTool_v1.5.3_Linux64.zip
+unzip MqttClientTestTool_v1.5.5_Linux64.zip
 docker stop mqttclienttesttool
 docker rm mqttclienttesttool
 docker rmi mqttclienttesttool
