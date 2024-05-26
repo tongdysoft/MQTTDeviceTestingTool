@@ -1,6 +1,6 @@
-![icon](macOS/mqttclienttesttool/AppIcon.xcassets/AppIcon.appiconset/MQTT%20client%20test%20tool%205.png)
+![icon](ico/icon.ico)
 
-# [MQTT Client Test Tool](https://github.com/tongdysoft/mqtt-test-server)
+# [MQTT Device Testing Tool](https://github.com/tongdysoft/mqtt-test-server)
 
 [ English | [中文](#mqtt-客户端测试工具)]
 
@@ -17,16 +17,6 @@ This tool can help you test the stability of your device's MQTT connection.
 
 Download the program from [Release](releases). No installation required.
 
-| Release files (Archive)  | OS      | >=ver | BC  | Arch                |
-| ------------------------ | ------- | ----- | --- | ------------------- |
-| `bin/*_Linux32.zip`      | Linux   | 2.6   | 32  | i386 (x86)          |
-| `bin/*_Linux64.zip`      | Linux   | 2.6   | 64  | amd64(x86-64)       |
-| `bin/*_macOS64.dmg`      | macOS   | 10.13 | 64  | amd64(x86-64)       |
-| `bin/*_macOSARM64.dmg`   | macOS   | 11    | 64  | arm64(AppleSilicon) |
-| `bin/*_Windows32.cab`    | Windows | 7     | 32  | i386 (x86)          |
-| `bin/*_Windows64.cab`    | Windows | 7     | 64  | amd64(x86-64)       |
-| `bin/*_WindowsARM64.cab` | Windows | 10    | 64  | arm64(aarch64)      |
-
 Non-Windows systems need to use `chmod +x <executable file name>` to add permission to run.
 
 ### Docker
@@ -36,21 +26,21 @@ Non-Windows systems need to use `chmod +x <executable file name>` to add permiss
 
 ### Linux systemd
 
-1. Copy `mqtttestclient.service` to `/etc/systemd/system/`
-2. Modify the path and start user in `/etc/systemd/system/mqtttestclient.service`
-3. `sudo systemctl start mqtttestclient.service`
+1. Copy `MQTTDeviceTestingTool.service` to `/etc/systemd/system/`
+2. Modify the path and start user in `/etc/systemd/system/MQTTDeviceTestingTool.service`
+3. `sudo systemctl start MQTTDeviceTestingTool.service`
 
 ### Linux desktop shortcuts
 
-1. Copy `mqttclienttesttool.desktop` to `~/Desktop`
-2. Modify the execution file and icon path in `~/Desktop/mqttclienttesttool.desktop`
+1. Copy `MQTTDeviceTestingTool.desktop` to `~/Desktop`
+2. Modify the execution file and icon path in `~/Desktop/MQTTDeviceTestingTool.desktop`
 
 ## Usage
 
 Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | cv .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
 
 - `-l string`
-  - Language ( `en(default) | cn` )
+  - Language ( `en(default) | chs` )
 - `-p string`
   - Define listening on IP:Port (default: `0.0.0.0:1883` )
   - To allow all IP addresses: `:1883`
@@ -130,18 +120,6 @@ acl:
         '#': 3
 ```
 
-### Use in macOS
-
-Before running this `.app` program directly, make sure that `Terminal.app` is in an exited state.
-
-#### Add startup parameters in macOS system
-
-1. Open the `.dmg` file of the corresponding platform in Release, find the `.app` file inside, and copy it to the `Applications` folder.
-2. Right click on the `.app` file and select `Show Package Contents`.
-3. Edit the `Contents/Resources/run.sh` script file, and add parameters at the comment position.
-
-The `Contents/Resources/MqttClientTestTool_macOS64` file can be extracted separately and run in the terminal.
-
 ## Build
 
 ```sh
@@ -158,7 +136,7 @@ Build all platforms under Windows: `build.bat`
 
 ## LICENSE
 
-Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy](https://github.com/tongdysoft) MqttClientTestTool is licensed under Mulan PSL v2. You can use this software according to the terms and conditions of the Mulan PSL v2. You may obtain a copy of Mulan PSL v2 at: <http://license.coscl.org.cn/MulanPSL2> THIS SOFTWARE IS PROVIDED ON AN “AS IS” BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the Mulan PSL v2 for more details.
+Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy](https://github.com/tongdysoft) MQTTDeviceTestingTool is licensed under Mulan PSL v2. You can use this software according to the terms and conditions of the Mulan PSL v2. You may obtain a copy of Mulan PSL v2 at: <http://license.coscl.org.cn/MulanPSL2> THIS SOFTWARE IS PROVIDED ON AN “AS IS” BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the Mulan PSL v2 for more details.
 
 ## Third-party
 
@@ -174,7 +152,7 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 这个工具可以帮助您测试设备的 MQTT 连接的稳定性。
 
 - 版本: `1.5.5`
-- golang 版本: `1.21.5`
+- golang 版本: `1.22.3`
 
 ## 功能
 
@@ -183,16 +161,6 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 ## 安装
 
 从 [Release](releases) 下载相应系统的可执行文件即可，无需安装。
-
-| Release 文件（压缩包）   | 系统    | 最低版 | 位  | 体系结构            |
-| ------------------------ | ------- | ------ | --- | ------------------- |
-| `bin/*_Linux32.zip`      | Linux   | 2.6    | 32  | i386 (x86)          |
-| `bin/*_Linux64.zip`      | Linux   | 2.6    | 64  | amd64(x86-64)       |
-| `bin/*_macOS64.dmg`      | macOS   | 10.13  | 64  | amd64(x86-64)       |
-| `bin/*_macOSARM64.dmg`   | macOS   | 11     | 64  | arm64(AppleSilicon) |
-| `bin/*_Windows32.cab`    | Windows | 7      | 32  | i386 (x86)          |
-| `bin/*_Windows64.cab`    | Windows | 7      | 64  | amd64(x86-64)       |
-| `bin/*_WindowsARM64.cab` | Windows | 10     | 64  | arm64(aarch64)      |
 
 非 Windows 系统需要使用 `chmod +x <解压缩后的可执行文件名>` 来添加运行权限。
 
@@ -203,21 +171,21 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 ### Linux 系统服务 (systemd)
 
-1. 复制 `mqtttestclient.service` 到 `/etc/systemd/system/`
-2. 修改 `/etc/systemd/system/mqtttestclient.service` 中的路径和启动用户等
-3. `sudo systemctl start mqtttestclient.service`
+1. 复制 `MQTTDeviceTestingTool.service` 到 `/etc/systemd/system/`
+2. 修改 `/etc/systemd/system/MQTTDeviceTestingTool.service` 中的路径和启动用户等
+3. `sudo systemctl start MQTTDeviceTestingTool.service`
 
 ### Linux 桌面快捷方式
 
-1. 复制 `mqttclienttesttool.desktop` 到 `~/桌面`
-2. 修改 `~/桌面/mqttclienttesttool.desktop` 中的执行文件和图标路径
+1. 复制 `MQTTDeviceTestingTool.desktop` 到 `~/桌面`
+2. 修改 `~/桌面/MQTTDeviceTestingTool.desktop` 中的执行文件和图标路径
 
 ## 使用说明
 
 命令行参数: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -cv .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
 
 - `-l 字符串`
-  - 语言 ( `en(英语,默认) | cn(简体中文)` )
+  - 语言 ( `en(英语,默认) | chs(简体中文)` )
 - `-p 字符串`
   - 指定要监听的地址和端口 (默认值: `0.0.0.0:1883` )
   - 如需允许所有 IP 地址： `:1883`
@@ -296,24 +264,6 @@ acl:
     - filters:
         '#': 3
 ```
-
-### 在 macOS 中使用
-
-在直接运行该 `.app` 程序之前，请确保 `终端.app` 处于退出状态。
-
-#### 添加启动参数
-
-在直接运行该 `.app` 程序之前，请确保 `终端.app` 处于退出状态。
-
-1. 打开 Release 中的相应平台的 `.dmg` 文件，找到里面的 `.app` 文件，将其复制到 `应用程序` 文件夹.
-2. 右键点击改 `.app` 文件，选择 `显示包内容` 。
-3. 编辑 `Contents/Resources/run.sh` 脚本文件，在里面注释位置处添加参数。
-
-可以将 `Contents/Resources/MqttClientTestTool_macOS64` 文件单独提取出来在终端中运行。
-
-### Windows 系统中使用中文交互模式
-
-可以将 `InteractiveModeCHS.bat` 和 exe 放在一起，双击启动中文交互模式，无需关心命令行参数书写。
 
 ## 编译
 

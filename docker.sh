@@ -1,6 +1,5 @@
-unzip MqttClientTestTool_v1.5.5_Linux64.zip
-docker stop mqttclienttesttool
-docker rm mqttclienttesttool
-docker rmi mqttclienttesttool
-docker build -t mqttclienttesttool .
-docker run -it -p 1883:1883 --name mqttclienttesttool -d mqttclienttesttool
+docker stop MQTTDeviceTestingTool
+docker rm MQTTDeviceTestingTool
+docker rmi MQTTDeviceTestingTool
+docker build -t MQTTDeviceTestingTool .
+docker run -it -p 1883:1883 --name MQTTDeviceTestingTool -d MQTTDeviceTestingTool

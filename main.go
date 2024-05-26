@@ -1,4 +1,4 @@
-//go:generate goversioninfo -icon=ico/icon.ico -manifest=main.exe.manifest
+//go:generate goversioninfo -icon=ico/icon.ico -manifest=main.exe.manifest -arm=true
 package main
 
 import (
@@ -65,7 +65,7 @@ func main() {
 	)
 	// 初始化启动参数
 	flag.BoolVar(&versionView, "v", false, "Print version info")
-	flag.StringVar(&language, "l", "auto", "Language ( en | cn )")
+	flag.StringVar(&language, "l", "auto", "Language ( en | chs )")
 	flag.StringVar(&listen, "p", "0.0.0.0:1883", "Define listening on IP:Port (default: 0.0.0.0:1883 )")
 	flag.StringVar(&onlyID, "c", "", "Only allow these client IDs (comma separated)")
 	flag.StringVar(&onlyTopic, "t", "", "Only allow these topics (comma separated)")
@@ -87,11 +87,11 @@ func main() {
 		syslang, _ := jibber_jabber.DetectIETF()
 		if len(syslang) > 0 {
 			if strings.Contains(syslang, "zh") {
-				language = "cn"
+				language = "chs"
 			}
 		}
 	}
-	logPrint("I", lang("TITLE")+" v"+version+" for "+runtime.GOOS+" (KagurazakaYashi@Tongdy, 2023)")
+	logPrint("I", lang("TITLE")+" v"+version+" for "+runtime.GOOS+" (KagurazakaYashi@Tongdy, 2024)")
 	logPrint("I", lang("HELP")+" https://github.com/tongdysoft/mqtt-test-server")
 	// 初始化设置
 	if versionView {
@@ -216,11 +216,14 @@ acl:
 	}
 	var tcp *listeners.TCP
 	if useTLS {
-		tcp = listeners.NewTCP(listen, listen, &listeners.Config{
+		tcp = listeners.NewTCP(listeners.Config{
+			Address:   listen,
 			TLSConfig: tlsConfig,
 		})
 	} else {
-		tcp = listeners.NewTCP(listen, listen, nil)
+		tcp = listeners.NewTCP(listeners.Config{
+			Address: listen,
+		})
 	}
 	err = server.AddListener(tcp)
 	if err != nil {

@@ -13,7 +13,7 @@ mqtt-test-server
 *.crt
 *.key
 auth.json
-macOS/mqttclienttesttool/MqttClientTestTool_macOS64
+macOS/mqttdevicetestingtool/MQTTDeviceTestingTool_macOS64
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/windows,macos,linux,csharp,visualstudio,visualstudiocode,go

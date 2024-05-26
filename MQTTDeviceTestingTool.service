@@ -1,9 +1,9 @@
 [Unit]
-Description=MQTT Client Test Tool
+Description=MQTT Device Testing Tool
 After=network.target
 
 [Service]
-ExecStart=/root/MqttClientTestTool_v1.5.5_Linux64
+ExecStart=/root/MQTTDeviceTestingTool
 WorkingDirectory=/root/
 Restart=always
 User=root
