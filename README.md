@@ -37,52 +37,57 @@ Non-Windows systems need to use `chmod +x <executable file name>` to add permiss
 
 ## Usage
 
-Command: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | cv .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
+Command: `mqtt-test-server -mode plain|tls|mtls [options]`
 
-- `-l string`
-  - Language ( `en(default) | chs` )
-- `-p string`
-  - Define listening on IP:Port (default: `0.0.0.0:1883` )
-  - To allow all IP addresses: `:1883`
-- `-u path-string`
-  - [Users and permissions file](#examples-of-user-and-rights-profiles) (.yaml/.json) path
-- `-ca path-string`
-  - CA certificate file path
-- `-ce path-string`
-  - Server certificate file path
-- `-ck path-string`
-  - Server key file path
-- `-cp string`
-  - Server key file password
-- `-cv number (0-4)`
-  - Policy the server will follow for TLS Client Authentication:
-    0. NoClientCert: Indicates that no client certificate should be requested during the handshake, and if any certificates are sent they will not be verified.
-    1. RequestClientCert: Indicates that a client certificate should be requested during the handshake, but does not require that the client send any certificates.
-    2. RequireAnyClientCert: Indicates that a client certificate should be requested during the handshake, and that at least one certificate is required to be sent by the client, but that certificate is not required to be valid.
-    3. VerifyClientCertIfGiven: Indicates that a client certificate should be requested during the handshake, but does not require that the client sends a certificate. If the client does send a certificate it is required to be valid.
-    4. RequireAndVerifyClientCert: Indicates that a client certificate should be requested during the handshake, and that at least one valid certificate is required to be sent by the client.
-  - default value:
-    - If no server certificate is given, the default value is `0`
-    - If at least a CA certificate is given, the default value is `4`
-    - If a server certificate is given, the default value is `3`
-- `-c string`
-  - Only allow these client IDs ( `,` separated)
-- `-t string`
-  - Only allow these topics ( `,` separated)
-- `-w string`
-  - Only allow these words in message content ( `,` separated)
-- `-m path-string`
-  - Log message to csv file
-- `-s path-string`
-  - Log state changes to a csv file
-- `-o path-string`
-  - Save log to txt/log file
-- `-ts`
-  - Use timestamps in logged files (instead of the time string)
-- `-n`
-  - Use a monochrome color scheme (When an abnormal character appears in Windows cmd.exe)
-- `-v`
-  - Print version info
+Security modes:
+
+- `plain` (default): ordinary MQTT, no TLS. Any TLS material parameter is rejected instead of being silently ignored.
+- `tls`: one-way TLS. Requires `-server-cert` and `-server-key`; the server does not request a device certificate.
+- `mtls`: mutual TLS. Requires `-server-cert`, `-server-key` and `-client-ca`, and always uses `tls.RequireAndVerifyClientCert`.
+
+TLS options:
+
+- `-server-cert path-string`
+  - Server certificate chain in PEM format (leaf first, then optional intermediates).
+- `-server-key path-string`
+  - Server private key in PEM format. Unencrypted PKCS#1/SEC1/PKCS#8 keys and legacy RFC 1423 encrypted PEM keys are supported. Encrypted PKCS#8 (`ENCRYPTED PRIVATE KEY`) is not supported and fails explicitly.
+- `-server-key-password string`
+  - Password for a legacy RFC 1423 encrypted key. Supplying a password for an unencrypted key is an error.
+- `-client-ca path-string`
+  - CA bundle used to verify device certificates. Required by `mtls`; rejected by `plain` and `tls`.
+- `-tls-min 1.2|1.3` / `-tls-max 1.2|1.3`
+  - TLS version range (default `1.2`-`1.3`). TLS 1.0 and 1.1 are rejected. `-tls-min` must not be higher than `-tls-max`.
+- `-allow-invalid-server-cert`
+  - Skips only the server certificate validity-period and serverAuth extended-key-usage checks for deliberate invalid-certificate tests. It never disables device certificate verification.
+
+General options:
+
+- `-listen IP:port`
+  - Listening address (default `0.0.0.0:1883`). Port `0` selects an ephemeral port; the actual address is printed at startup.
+- `-users path-string`
+  - [Users and permissions file](#examples-of-user-and-rights-profiles) (.yaml/.json) path.
+- `-only-client-id string`
+  - Only allow these client IDs (comma separated).
+- `-only-topic string`
+  - Only allow these topics (comma separated).
+- `-only-payload string`
+  - Only allow messages containing these words (comma separated).
+- `-log-data path-string`
+  - Log message data to a CSV file.
+- `-log-status path-string`
+  - Log state changes to a CSV file.
+- `-log path-string`
+  - Save the text log to a file.
+- `-log-timestamp`
+  - Use Unix timestamps in logged CSV files instead of the time string.
+- `-monochrome`
+  - Use a monochrome color scheme (for terminals such as Windows cmd.exe).
+- `-lang auto|en|chs`
+  - Display language (default `auto`).
+- `-version`
+  - Print version info and exit.
+
+TLS or configuration errors stop startup with a non-zero exit code. The server never downgrades from TLS/mTLS to plain TCP or weakens client certificate verification automatically. The startup summary prints the effective mode, bound address, TLS version range and whether device certificates are required and verified.
 
 ### Examples of User and Rights Profiles
 
@@ -182,52 +187,57 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 
 ## 使用说明
 
-命令行参数: mqtt-test-server `< -l .. | -p .. | -u .. | -ca .. | -ce .. | ck .. | cp .. | -cv .. | -c .. | -t .. | -w .. | -d .. | -s .. | -o .. | -ts | -n | -v >`
+命令行: `mqtt-test-server -mode plain|tls|mtls [选项]`
 
-- `-l 字符串`
-  - 语言 ( `en(英语,默认) | chs(简体中文)` )
-- `-p 字符串`
-  - 指定要监听的地址和端口 (默认值: `0.0.0.0:1883` )
-  - 如需允许所有 IP 地址： `:1883`
-- `-u 文件路径字符串`
-  - [用户和主题权限配置文件](#用户和主题权限配置文件示例) (.yaml/.json) 路径
-- `-ca 文件路径字符串`
-  - CA 证书文件路径
-- `-ce 文件路径字符串`
-  - 服务器证书文件路径
-- `-ck 文件路径字符串`
-  - 服务器私钥文件路径
-- `-cp 字符串`
-  - 服务器私钥文件的密码
-- `-cv 数字 (0-4)`
-  - TLS 客户端身份验证策略:
-    0. 无客户端证书: 表示握手期间不应请求客户端证书，如果发送任何证书，则不会对其进行验证。
-    1. 请求客户端证书: 表示在握手期间应请求客户端证书，但不要求客户端发送任何证书。
-    2. 需要任何客户端证书: 表示握手期间应请求客户端证书，并且客户端至少需要发送一个证书，但不要求该证书有效。
-    3. 验证客户端证书是否已给出: 表示握手期间应请求客户端证书，但不要求客户端发送证书。如果客户端确实发送了证书，则该证书必须有效。
-    4. 需要并验证客户端证书: 表示握手时需要请求客户端证书，并且客户端至少需要发送一个有效的证书。
-  - 默认值:
-    - 如果没有给予服务器证书，那么默认值是 `0`
-    - 如果至少给予了CA证书，那么默认值是 `4`
-    - 如果给予了服务器证书，那么默认值是 `3`
-- `-c 字符串`
-  - 只允许客户端 ID 为这些的客户端（使用 `,` 分隔）
-- `-t 字符串`
-  - 只接收这些主题的信息（使用 `,` 分隔）
-- `-w 字符串`
-  - 只有消息内容包含这些关键词才会处理（使用 `,` 分隔）
-- `-m 文件路径字符串`
-  - 将收取到的消息保存到某个 .csv 文件
-- `-s 文件路径字符串`
-  - 将客户端的连接、断开、订阅、退订等行为保存到某个 .csv 文件
-- `-o 文件路径字符串`
-  - 将日志输出保存到某个 .txt / .log 文件
-- `-ts`
-  - 在记录的文件中使用时间戳而不是时间
-- `-n`
-  - 使用单色模式输出，避免某些不支持彩色的终端输出乱码（例如 Windows 的 cmd.exe）
-- `-v`
-  - 显示版本号等信息并退出
+安全模式：
+
+- `plain`（默认）：普通 MQTT，不启用 TLS。只要传入 TLS 相关参数就会报错，不会被静默忽略。
+- `tls`：单向 TLS。必须提供 `-server-cert` 和 `-server-key`，服务器不请求设备证书。
+- `mtls`：强制双向 TLS。必须提供 `-server-cert`、`-server-key` 和 `-client-ca`，固定使用 `tls.RequireAndVerifyClientCert` 要求并验证设备证书。
+
+TLS 参数：
+
+- `-server-cert 文件路径`
+  - PEM 格式的服务器证书链（叶证书在前，其后可附中间证书）。
+- `-server-key 文件路径`
+  - PEM 格式的服务器私钥。支持未加密的 PKCS#1/SEC1/PKCS#8 私钥，以及旧式 RFC 1423 加密 PEM 私钥；不支持加密的 PKCS#8（`ENCRYPTED PRIVATE KEY`），遇到时会明确报错。
+- `-server-key-password 字符串`
+  - 旧式 RFC 1423 加密私钥的密码。私钥未加密时传入密码会报错，避免误以为密码已生效。
+- `-client-ca 文件路径`
+  - 用于验证设备证书的 CA 信任库。`mtls` 模式必需；`plain` 和 `tls` 模式传入会报错。
+- `-tls-min 1.2|1.3` / `-tls-max 1.2|1.3`
+  - TLS 版本范围（默认 `1.2`-`1.3`）。拒绝 TLS 1.0 和 1.1；`-tls-min` 不得高于 `-tls-max`。
+- `-allow-invalid-server-cert`
+  - 仅供反例测试，仅跳过服务器证书有效期与 serverAuth 扩展密钥用途检查，不会关闭设备证书验证。
+
+通用参数：
+
+- `-listen IP:端口`
+  - 监听地址（默认 `0.0.0.0:1883`）。端口 `0` 表示由系统分配动态端口，启动时会显示实际地址。
+- `-users 文件路径`
+  - [用户和主题权限配置文件](#用户和主题权限配置文件示例) (.yaml/.json) 路径。
+- `-only-client-id 字符串`
+  - 只允许客户端 ID 为这些的客户端（使用 `,` 分隔）。
+- `-only-topic 字符串`
+  - 只接收这些主题的信息（使用 `,` 分隔）。
+- `-only-payload 字符串`
+  - 只有消息内容包含这些关键词才会处理（使用 `,` 分隔）。
+- `-log-data 文件路径`
+  - 将收取到的消息保存到 .csv 文件。
+- `-log-status 文件路径`
+  - 将客户端的连接、断开、订阅、退订等行为保存到 .csv 文件。
+- `-log 文件路径`
+  - 将日志输出保存到 .txt / .log 文件。
+- `-log-timestamp`
+  - 在记录的 CSV 文件中使用 Unix 时间戳而不是时间字符串。
+- `-monochrome`
+  - 使用单色模式输出，避免某些终端（例如 Windows 的 cmd.exe）显示乱码。
+- `-lang auto|en|chs`
+  - 显示语言（默认 `auto`）。
+- `-version`
+  - 显示版本号等信息并退出。
+
+TLS 或配置错误会以非零退出码终止启动。程序不会从 TLS/mTLS 自动降级为明文，也不会自动放宽设备证书验证。启动摘要会显示实际生效的模式、监听地址、TLS 版本范围，以及是否强制验证设备证书。
 
 ### 用户和主题权限配置文件示例
 
