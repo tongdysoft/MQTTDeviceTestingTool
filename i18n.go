@@ -24,8 +24,16 @@ var langs map[string][]string = map[string][]string{
 		"强制要求并验证（RequireAndVerifyClientCert）",
 	},
 	"INVALIDCERTWARN": {
-		"WARNING: server certificate validity/EKU checks are disabled by -allow-invalid-server-cert",
-		"警告：已通过 -allow-invalid-server-cert 禁用服务器证书有效期与用途检查",
+		"WARNING: -allow-invalid-server-cert is enabled; only semantic certificate checks are relaxed",
+		"警告：已启用 -allow-invalid-server-cert，仅放宽服务器证书的语义检查",
+	},
+	"CERTCHAIN":  {"Certificate chain", "证书链"},
+	"CLIENTCAS":  {"Client trust anchors", "设备证书信任锚数量"},
+	"CERTWARN":   {"Certificate note: ", "证书提示："},
+	"CERTBYPASS": {"Allowed invalid server certificate: ", "已放行的服务器证书问题："},
+	"KEYPWDSOURCE": {
+		"Key password source",
+		"私钥密码来源",
 	},
 	"STARTFAIL":       {"Failed to start: ", "启动失败："},
 	"CLIENT":          {"Client", "客户端"},

@@ -50,15 +50,23 @@ TLS options:
 - `-server-cert path-string`
   - Server certificate chain in PEM format (leaf first, then optional intermediates).
 - `-server-key path-string`
-  - Server private key in PEM format. Unencrypted PKCS#1/SEC1/PKCS#8 keys and legacy RFC 1423 encrypted PEM keys are supported. Encrypted PKCS#8 (`ENCRYPTED PRIVATE KEY`) is not supported and fails explicitly.
-- `-server-key-password string`
-  - Password for a legacy RFC 1423 encrypted key. Supplying a password for an unencrypted key is an error.
+  - Server private key in PEM format. Unencrypted PKCS#1 (`RSA PRIVATE KEY`), SEC1 (`EC PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`, RSA/ECDSA/Ed25519) keys are supported. Legacy RFC 1423 encrypted PEM keys and encrypted PKCS#8 (`ENCRYPTED PRIVATE KEY`, PBES2 with PBKDF2/scrypt and AES/3DES) are also supported. OpenSSH, DSA, raw Ed25519 (non-PKCS#8) and multiple key blocks are rejected explicitly.
+- `-server-key-password-file path-string`
+  - File containing the password for an encrypted key. The trailing newline is stripped. The file should be readable only by the account running the tool (mode `0600`); wider permissions produce a warning. Alternatively set `MQTT_SERVER_KEY_PASSWORD`, or let the tool prompt on an interactive terminal. A plaintext password command-line option is intentionally not provided.
+  - If the private key is encrypted and no password file, environment variable or interactive terminal is available, startup fails. Supplying a password source for an unencrypted key is an error; the password is never ignored.
 - `-client-ca path-string`
-  - CA bundle used to verify device certificates. Required by `mtls`; rejected by `plain` and `tls`.
+  - PEM bundle of one or more trust anchors used to verify device certificates. Required by `mtls`; rejected by `plain` and `tls`. This is a device-issuing trust source only: it is never replaced by, or mixed with, the server certificate chain, and the server CA private key is not required.
 - `-tls-min 1.2|1.3` / `-tls-max 1.2|1.3`
   - TLS version range (default `1.2`-`1.3`). TLS 1.0 and 1.1 are rejected. `-tls-min` must not be higher than `-tls-max`.
 - `-allow-invalid-server-cert`
-  - Skips only the server certificate validity-period and serverAuth extended-key-usage checks for deliberate invalid-certificate tests. It never disables device certificate verification.
+  - For deliberate negative tests, allows semantic-only server certificate problems: validity period, serverAuth EKU, key usage, CA-as-leaf, and expiry of chain certificates. Each bypassed item is printed at startup. It never bypasses file-read/PEM/certificate/private-key parse errors, key pairing errors or chain signature/CA-attribute errors, and it never disables device certificate verification.
+
+Certificate loading behavior:
+
+- The server certificate file may contain extra non-`CERTIFICATE` blocks (for example, a combined certificate/key file); they are ignored and counted in the startup report. All `CERTIFICATE` blocks must be ordered leaf-first; the tool does not reorder a reversed chain. OpenSSL `Bag Attributes` metadata before the first block is accepted; arbitrary leading non-PEM text and malformed or unterminated blocks fail.
+- The private key file must contain exactly one supported private key block. Other blocks are ignored and reported. Empty files, multiple key blocks, malformed blocks and trailing non-PEM data fail startup.
+- The client CA bundle may contain multiple `CERTIFICATE` blocks and is loaded as a whole. A non-CA trust anchor is accepted with a warning; it may only be usable for explicit leaf pinning in some clients. Empty or malformed bundles fail startup.
+- Startup prints the loaded chain, key format, password source (never the password), client trust-anchor count, certificate notes and every check bypassed by `-allow-invalid-server-cert`.
 
 General options:
 
@@ -151,6 +159,9 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 - gorilla/websocket ([BSD 2-Clause "Simplified" License](https://github.com/gorilla/websocket/blob/master/LICENSE))
 - josephspurrier/goversioninfo ([MIT License](https://github.com/josephspurrier/goversioninfo/blob/master/LICENSE))
 - rs/xid ([MIT License](https://github.com/rs/xid/blob/master/LICENSE))
+- youmark/pkcs8 ([MIT License](https://github.com/youmark/pkcs8/blob/master/LICENSE)) — required to decrypt PBES2 encrypted PKCS#8 private keys; the Go standard library cannot do this.
+- golang.org/x/term ([BSD 3-Clause License](https://github.com/golang/term/blob/master/LICENSE)) — hidden terminal password input.
+- golang.org/x/crypto ([BSD 3-Clause License](https://github.com/golang/crypto/blob/master/LICENSE)) — indirect dependency of pkcs8 (PBKDF2 and scrypt).
 
 # [MQTT 客户端测试工具](https://github.com/tongdysoft/mqtt-test-server)
 
@@ -200,15 +211,23 @@ TLS 参数：
 - `-server-cert 文件路径`
   - PEM 格式的服务器证书链（叶证书在前，其后可附中间证书）。
 - `-server-key 文件路径`
-  - PEM 格式的服务器私钥。支持未加密的 PKCS#1/SEC1/PKCS#8 私钥，以及旧式 RFC 1423 加密 PEM 私钥；不支持加密的 PKCS#8（`ENCRYPTED PRIVATE KEY`），遇到时会明确报错。
-- `-server-key-password 字符串`
-  - 旧式 RFC 1423 加密私钥的密码。私钥未加密时传入密码会报错，避免误以为密码已生效。
+  - PEM 格式的服务器私钥。支持未加密的 PKCS#1（`RSA PRIVATE KEY`）、SEC1（`EC PRIVATE KEY`）和 PKCS#8（`PRIVATE KEY`，RSA/ECDSA/Ed25519）；也支持旧式 RFC 1423 加密 PEM 私钥和加密 PKCS#8（`ENCRYPTED PRIVATE KEY`，PBES2 + PBKDF2/scrypt + AES/3DES）。OpenSSH、DSA、非 PKCS#8 的裸 Ed25519 以及包含多个私钥区块的文件会明确报错。
+- `-server-key-password-file 文件路径`
+  - 加密私钥的密码文件，读取时会去掉末尾换行。文件应只允许运行本工具的账号读取（`0600`），权限过宽会给出警告。也可以使用环境变量 `MQTT_SERVER_KEY_PASSWORD`，或在交互式终端中由程序隐藏输入提示。命令行不提供明文密码参数。
+  - 私钥已加密但既没有密码文件、环境变量，也没有可交互终端时，启动会失败。私钥未加密却提供密码来源会报错，密码不会被静默忽略。
 - `-client-ca 文件路径`
-  - 用于验证设备证书的 CA 信任库。`mtls` 模式必需；`plain` 和 `tls` 模式传入会报错。
+  - 用于验证设备证书的 PEM 信任锚集合，可包含多个 CA。`mtls` 模式必需；`plain` 和 `tls` 模式传入会报错。它只表示设备证书的签发信任源，不会被服务器证书链替换或混用；不需要提供服务器 CA 私钥。
 - `-tls-min 1.2|1.3` / `-tls-max 1.2|1.3`
   - TLS 版本范围（默认 `1.2`-`1.3`）。拒绝 TLS 1.0 和 1.1；`-tls-min` 不得高于 `-tls-max`。
 - `-allow-invalid-server-cert`
-  - 仅供反例测试，仅跳过服务器证书有效期与 serverAuth 扩展密钥用途检查，不会关闭设备证书验证。
+  - 仅供反例测试，只放行服务器证书的语义问题：有效期、serverAuth 扩展密钥用途、密钥用途、把 CA 证书当作叶证书，以及链中证书过期。每个放行项都会在启动时输出。它不会放行文件读取、PEM/证书/私钥解析、私钥配对、链签名或 CA 属性错误，也绝不会关闭设备证书验证。
+
+证书加载行为：
+
+- 服务器证书文件可以包含额外的非 `CERTIFICATE` 区块（例如证书与私钥合并文件），这些区块会被忽略并计入启动报告。所有 `CERTIFICATE` 区块必须按叶证书在前的顺序排列，工具不会自动重排倒序链。第一个区块之前的 OpenSSL `Bag Attributes` 元数据可以接受；其他任意前导非 PEM 文本以及损坏或未闭合的区块会导致失败。
+- 私钥文件必须且只能包含一个受支持的私钥区块。其他区块会被忽略并报告。空文件、多个私钥区块、损坏区块和尾部非 PEM 数据都会导致启动失败。
+- 设备 CA 文件可以包含多个 `CERTIFICATE` 区块并整体载入。非 CA 信任锚会给出警告但仍可载入；它可能只能用于部分客户端的精确叶证书固定。空文件或损坏内容会导致启动失败。
+- 启动时会显示实际加载的证书链、私钥格式、密码来源（绝不显示密码）、设备信任锚数量、证书提示以及所有由 `-allow-invalid-server-cert` 放行的检查项。
 
 通用参数：
 

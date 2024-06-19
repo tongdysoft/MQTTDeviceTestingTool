@@ -5,12 +5,15 @@ go 1.22.3
 require (
 	github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
 	github.com/logrusorgru/aurora v2.0.3+incompatible
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
+	golang.org/x/term v0.20.0
 )
 
 require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/onsi/gomega v1.33.1 // indirect
+	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
 )
 

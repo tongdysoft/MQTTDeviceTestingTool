@@ -69,6 +69,19 @@ func main() {
 		return
 	}
 
+	if cfg.Mode != ModePlain {
+		password, err := ResolveKeyPassword(PasswordSourceOptions{
+			File:    cfg.ServerKeyPasswordFile,
+			StdinFd: int(os.Stdin.Fd()),
+			Prompt:  os.Stderr,
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "configuration error:", err)
+			os.Exit(2)
+		}
+		cfg.KeyPassword = password
+	}
+
 	applyLogOptions(cfg)
 	applyFilterOptions(cfg)
 	logInit(cfg.Listen, lang("TITLE")+" v"+version)
@@ -158,9 +171,36 @@ func logEffectiveConfig(server *RunningServer) {
 	} else {
 		logPrint("C", fmt.Sprintf("%s: %s", lang("CLIENTAUTH"), lang("CLIENTAUTH_NONE")))
 	}
+
+	report := server.CertificateReport()
+	if report != nil {
+		logPrint("C", fmt.Sprintf("%s: %s", lang("CERTCHAIN"), formatChainSummary(report.ServerChain)))
+		logPrint("C", fmt.Sprintf("%s: %s", lang("SERVERKEY"), report.ServerKeyFormat))
+		logPrint("C", fmt.Sprintf("%s: %s", lang("KEYPWDSOURCE"), report.ServerKeyPasswordSource))
+		if report.ClientCAs > 0 {
+			logPrint("C", fmt.Sprintf("%s: %d", lang("CLIENTCAS"), report.ClientCAs))
+		}
+		for _, warning := range report.Warnings {
+			logPrint("C", lang("CERTWARN")+warning)
+		}
+		for _, bypassed := range report.Bypassed {
+			logPrint("X", lang("CERTBYPASS")+bypassed)
+		}
+	}
 	if cfg.AllowInvalidServerCert {
 		logPrint("X", lang("INVALIDCERTWARN"))
 	}
+}
+
+func formatChainSummary(chain []CertificateSummary) string {
+	if len(chain) == 0 {
+		return "?"
+	}
+	parts := make([]string, 0, len(chain))
+	for _, cert := range chain {
+		parts = append(parts, cert.Subject)
+	}
+	return strings.Join(parts, " -> ")
 }
 
 func modeLabel(mode SecurityMode) string {

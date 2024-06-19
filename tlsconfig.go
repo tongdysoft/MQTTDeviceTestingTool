@@ -2,16 +2,25 @@ package main
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
-	"os"
 	"time"
 )
 
-// BuildTLSConfig 是最终 tls.Config 的唯一构建入口。
-// 它在创建监听器之前完成证书加载、客户端信任库加载和认证策略设置，
+// TLSMaterial 是构建完成的 TLS 配置及其可审计的证书加载报告。
+type TLSMaterial struct {
+	Config      *tls.Config
+	Server      *ServerIdentity
+	ClientTrust *ClientTrustStore
+	Report      CertificateReport
+}
+
+// BuildTLSMaterial 是最终 tls.Config 的唯一构建入口。
+// 它在创建监听器之前完成服务器身份加载、设备信任库加载和认证策略设置，
 // 调用方不得在之后重新构造或覆盖 ClientAuth。
-func (c *Config) BuildTLSConfig() (*tls.Config, error) {
+//
+// 服务器证书链只来自 -server-cert，ClientCAs 只来自 -client-ca；
+// 两者不会互相替代，也不需要提供服务器 CA 私钥。
+func (c *Config) BuildTLSMaterial() (*TLSMaterial, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -28,60 +37,73 @@ func (c *Config) BuildTLSConfig() (*tls.Config, error) {
 		return nil, fmt.Errorf("invalid -tls-max: %w", err)
 	}
 
-	certPEM, err := os.ReadFile(c.ServerCertFile)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read server certificate %s: %w", c.ServerCertFile, err)
-	}
-	keyPEM, err := os.ReadFile(c.ServerKeyFile)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read server key %s: %w", c.ServerKeyFile, err)
-	}
-	cert, err := LoadServerCertificate(certPEM, keyPEM, c.ServerKeyPassword)
-	if err != nil {
-		return nil, err
-	}
-	if !c.AllowInvalidServerCert {
-		if err := ValidateServerCertificatePeriod(cert.Leaf, time.Now()); err != nil {
-			return nil, fmt.Errorf("%w (use -allow-invalid-server-cert only for deliberate invalid-certificate tests)", err)
-		}
-		if err := ValidateServerCertificateUsage(cert.Leaf); err != nil {
-			return nil, fmt.Errorf("%w (use -allow-invalid-server-cert only for deliberate invalid-certificate tests)", err)
+	password := c.KeyPassword
+	if password == nil {
+		// 嵌入式调用 StartServer 时也能使用密码文件、环境变量或交互提示；
+		// 只有确认私钥加密后才会真正读取密码。
+		password, err = ResolveKeyPassword(PasswordSourceOptions{File: c.ServerKeyPasswordFile})
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	// 只在这里构造一次 tls.Config，确保后续不会丢失 ClientAuth。
+	identity, err := LoadServerIdentityFiles(c.ServerCertFile, c.ServerKeyFile, IdentityOptions{
+		Password:               password,
+		AllowInvalidServerCert: c.AllowInvalidServerCert,
+		Now:                    time.Now(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	report := identity.Report
+	report.ServerKeyPasswordSource = passwordSourceName(password, report.ServerKeyEncrypted)
+	report.Warnings = append(report.Warnings, passwordWarnings(password)...)
+
 	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
+		Certificates: []tls.Certificate{identity.Certificate},
 		MinVersion:   minVersion,
 		MaxVersion:   maxVersion,
 		ClientAuth:   tls.NoClientCert,
 	}
 
+	material := &TLSMaterial{
+		Server: identity,
+		Report: report,
+	}
+
 	if c.Mode == ModeMTLS {
-		pool, err := LoadClientCAPool(c.ClientCAFile)
+		trust, err := LoadClientTrustStoreFile(c.ClientCAFile)
 		if err != nil {
 			return nil, err
 		}
-		tlsConfig.ClientCAs = pool
+		material.ClientTrust = trust
+		material.Report.ClientCAs = len(trust.Certificates)
+		material.Report.Warnings = append(material.Report.Warnings, trust.Warnings...)
+		tlsConfig.ClientCAs = trust.Pool
 		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	} else if c.ClientCAFile != "" {
 		// 该分支已被 Validate 拦截，这里保留防御性检查，避免将来静默忽略 CA。
 		return nil, fmt.Errorf("mode %q does not use a client CA", c.Mode)
 	}
 
-	return tlsConfig, nil
+	material.Config = tlsConfig
+	return material, nil
 }
 
-// LoadClientCAPool 读取用于验证设备证书的 CA 信任库。
-// 它只影响客户端证书验证，不能与服务器证书链或服务器私钥混用。
-func LoadClientCAPool(path string) (*x509.CertPool, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read client CA %s: %w", path, err)
+func passwordSourceName(password *KeyPasswordSpec, encrypted bool) string {
+	if !encrypted {
+		return "not used (key not encrypted)"
 	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(content) {
-		return nil, fmt.Errorf("client CA file %s contains no valid PEM certificates", path)
+	if password == nil {
+		return "none"
 	}
-	return pool, nil
+	return password.Source()
+}
+
+func passwordWarnings(password *KeyPasswordSpec) []string {
+	if password == nil {
+		return nil
+	}
+	return password.Warnings()
 }

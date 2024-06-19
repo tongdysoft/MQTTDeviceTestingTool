@@ -36,7 +36,8 @@ type Config struct {
 	Mode                   SecurityMode
 	ServerCertFile         string
 	ServerKeyFile          string
-	ServerKeyPassword      string
+	ServerKeyPasswordFile  string
+	KeyPassword            *KeyPasswordSpec
 	ClientCAFile           string
 	TLSMinVersion          string
 	TLSMaxVersion          string
@@ -82,11 +83,11 @@ func ParseConfig(args []string) (*Config, error) {
 	fs.StringVar(&mode, "mode", string(ModePlain), "Security mode: plain, tls, mtls")
 	fs.StringVar(&cfg.ServerCertFile, "server-cert", "", "Server certificate chain PEM file (required for tls/mtls)")
 	fs.StringVar(&cfg.ServerKeyFile, "server-key", "", "Server private key PEM file (required for tls/mtls)")
-	fs.StringVar(&cfg.ServerKeyPassword, "server-key-password", "", "Password for a legacy RFC 1423 encrypted server key")
+	fs.StringVar(&cfg.ServerKeyPasswordFile, "server-key-password-file", "", "File containing the server key password (trailing newline stripped)")
 	fs.StringVar(&cfg.ClientCAFile, "client-ca", "", "CA bundle used to verify device certificates (required for mtls)")
 	fs.StringVar(&cfg.TLSMinVersion, "tls-min", defaultTLSMin, "Minimum TLS version: 1.2 or 1.3")
 	fs.StringVar(&cfg.TLSMaxVersion, "tls-max", defaultTLSMax, "Maximum TLS version: 1.2 or 1.3")
-	fs.BoolVar(&cfg.AllowInvalidServerCert, "allow-invalid-server-cert", false, "Skip server certificate validity-period and serverAuth EKU checks (test use)")
+	fs.BoolVar(&cfg.AllowInvalidServerCert, "allow-invalid-server-cert", false, "Allow semantic-only server certificate problems (expiry, EKU/key usage, CA-as-leaf, chain expiry) for deliberate negative tests")
 	fs.StringVar(&cfg.UserFile, "users", "", "Users and permissions file (.yaml/.json)")
 	fs.StringVar(&onlyClientIDs, "only-client-id", "", "Only allow these client IDs (comma separated)")
 	fs.StringVar(&onlyTopics, "only-topic", "", "Only allow these topics (comma separated)")
@@ -127,7 +128,7 @@ func (c *Config) Validate() error {
 
 	switch c.Mode {
 	case ModePlain:
-		if c.ServerCertFile != "" || c.ServerKeyFile != "" || c.ServerKeyPassword != "" || c.ClientCAFile != "" {
+		if c.ServerCertFile != "" || c.ServerKeyFile != "" || c.ServerKeyPasswordFile != "" || c.KeyPassword != nil || c.ClientCAFile != "" {
 			return fmt.Errorf("mode %q does not accept TLS materials; set -mode tls or -mode mtls", c.Mode)
 		}
 		if c.AllowInvalidServerCert {
@@ -180,6 +181,7 @@ func (c *Config) Validate() error {
 	}{
 		{"server certificate", c.ServerCertFile},
 		{"server key", c.ServerKeyFile},
+		{"server key password", c.ServerKeyPasswordFile},
 		{"client CA", c.ClientCAFile},
 		{"users file", c.UserFile},
 	} {

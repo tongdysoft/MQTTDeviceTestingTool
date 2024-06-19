@@ -31,10 +31,10 @@ type StartOptions struct {
 
 // RunningServer 表示已绑定监听器并启动事件循环的服务器。
 type RunningServer struct {
-	config    *Config
-	server    *mqtt.Server
-	tlsConfig *tls.Config
-	addr      string
+	config   *Config
+	server   *mqtt.Server
+	material *TLSMaterial
+	addr     string
 
 	closeOnce sync.Once
 	closeErr  error
@@ -50,9 +50,13 @@ func StartServer(opts StartOptions) (*RunningServer, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	tlsConfig, err := cfg.BuildTLSConfig()
+	material, err := cfg.BuildTLSMaterial()
 	if err != nil {
 		return nil, err
+	}
+	tlsConfig := (*tls.Config)(nil)
+	if material != nil {
+		tlsConfig = material.Config
 	}
 
 	userData := opts.UserData
@@ -101,10 +105,10 @@ func StartServer(opts StartOptions) (*RunningServer, error) {
 	}
 
 	return &RunningServer{
-		config:    cfg,
-		server:    server,
-		tlsConfig: tlsConfig,
-		addr:      tcp.Address(),
+		config:   cfg,
+		server:   server,
+		material: material,
+		addr:     tcp.Address(),
 	}, nil
 }
 
@@ -120,7 +124,20 @@ func (r *RunningServer) Config() *Config {
 
 // TLSConfig 返回实际传给监听器的 TLS 配置；plain 模式下为 nil。
 func (r *RunningServer) TLSConfig() *tls.Config {
-	return r.tlsConfig
+	if r.material == nil {
+		return nil
+	}
+	return r.material.Config
+}
+
+// CertificateReport 返回证书链、信任库与放行项的可审计报告。
+// plain 模式返回 nil。
+func (r *RunningServer) CertificateReport() *CertificateReport {
+	if r.material == nil {
+		return nil
+	}
+	report := r.material.Report
+	return &report
 }
 
 // Close 关闭监听器、客户端和服务器事件循环，可重复调用。
