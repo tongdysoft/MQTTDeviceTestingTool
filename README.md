@@ -258,6 +258,24 @@ TLS 参数：
 
 TLS 或配置错误会以非零退出码终止启动。程序不会从 TLS/mTLS 自动降级为明文，也不会自动放宽设备证书验证。启动摘要会显示实际生效的模式、监听地址、TLS 版本范围，以及是否强制验证设备证书。
 
+### 真实设备测试证书（OpenSSL 脚本）
+
+需要给真实设备准备长期使用的测试证书时，可在已安装 bash 与 OpenSSL 1.1.1+ 的机器上运行：
+
+```sh
+bash scripts/gen-test-certs.sh -o "certs/设备测试-01" \
+    --san-dns "mqtt.example.com,localhost" --san-ip "192.168.1.10,127.0.0.1" \
+    --device-id dev-001
+```
+
+Windows 默认 cmd 可运行 `scripts\gen-test-certs.bat`（内部调用 MSYS2/Git Bash）；参数含中文时建议直接在 MSYS2 终端执行 `.sh`。脚本生成 CA A/CA B、服务器证书、设备导入材料，以及过期、未生效、EKU 错误、SAN 不匹配、不受信任 CA 等反例，并在生成后用 OpenSSL 复核链、用途、SAN、时间和公私钥匹配。设备目录不包含 CA 私钥或服务器私钥；输出目录已存在时不会覆盖。每项反例的唯一预期失败原因见输出目录内的 `manifest.txt` 与 `说明.txt`。
+
+该脚本只用于人工测试材料，基础 `go test` 不依赖它。可选的脚本集成测试需显式启用：
+
+```sh
+MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
+```
+
 ### 用户和主题权限配置文件示例
 
 ```yaml

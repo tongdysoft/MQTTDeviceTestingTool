@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -32,9 +33,19 @@ type testCertOptions struct {
 	ExtKeyUsage []x509.ExtKeyUsage
 	DNSNames    []string
 	IPAddresses []net.IP
+	KeyType     testKeyType
 	Key         crypto.Signer
 	Serial      *big.Int
 }
+
+// testKeyType 表示测试证书使用的密钥类型。
+// 默认使用 ECDSA P-256；RSA 仅用于有代表性的兼容性场景，不作为真实设备能力声明。
+type testKeyType string
+
+const (
+	testKeyECDSA testKeyType = "ecdsa-p256"
+	testKeyRSA   testKeyType = "rsa-2048"
+)
 
 type testCert struct {
 	Certificate *x509.Certificate
@@ -60,11 +71,7 @@ func newTestCert(t *testing.T, opts testCertOptions, parent *testCert) *testCert
 		opts.NotAfter = time.Now().Add(time.Hour)
 	}
 	if opts.Key == nil {
-		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		if err != nil {
-			t.Fatalf("generate ECDSA key: %v", err)
-		}
-		opts.Key = key
+		opts.Key = newTestKey(t, opts.KeyType)
 	}
 	serial := opts.Serial
 	if serial == nil {
@@ -107,6 +114,27 @@ func newTestCert(t *testing.T, opts testCertOptions, parent *testCert) *testCert
 	}
 }
 
+func newTestKey(t *testing.T, keyType testKeyType) crypto.Signer {
+	t.Helper()
+	switch keyType {
+	case "", testKeyECDSA:
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatalf("generate ECDSA key: %v", err)
+		}
+		return key
+	case testKeyRSA:
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatalf("generate RSA key: %v", err)
+		}
+		return key
+	default:
+		t.Fatalf("unsupported test key type %q", keyType)
+		return nil
+	}
+}
+
 func newTestCA(t *testing.T, commonName string, notBefore, notAfter time.Time) *testCert {
 	t.Helper()
 	return newTestCert(t, testCertOptions{
@@ -117,7 +145,37 @@ func newTestCA(t *testing.T, commonName string, notBefore, notAfter time.Time) *
 	}, nil)
 }
 
+func newTestCAWithKey(t *testing.T, commonName string, notBefore, notAfter time.Time, keyType testKeyType) *testCert {
+	t.Helper()
+	return newTestCert(t, testCertOptions{
+		CommonName: commonName,
+		NotBefore:  notBefore,
+		NotAfter:   notAfter,
+		IsCA:       true,
+		KeyType:    keyType,
+	}, nil)
+}
+
+// newTestIntermediateCA 创建由 parent 签发的中间 CA，用于完整链与缺失链场景。
+func newTestIntermediateCA(t *testing.T, commonName string, parent *testCert, notBefore, notAfter time.Time, keyType testKeyType) *testCert {
+	t.Helper()
+	return newTestCert(t, testCertOptions{
+		CommonName: commonName,
+		NotBefore:  notBefore,
+		NotAfter:   notAfter,
+		IsCA:       true,
+		KeyType:    keyType,
+	}, parent)
+}
+
 func newTestServerLeaf(t *testing.T, commonName string, parent *testCert, notBefore, notAfter time.Time, extKeyUsage []x509.ExtKeyUsage) *testCert {
+	t.Helper()
+	return newTestServerLeafForNames(t, commonName, parent, notBefore, notAfter, extKeyUsage,
+		[]string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1")}, "")
+}
+
+func newTestServerLeafForNames(t *testing.T, commonName string, parent *testCert, notBefore, notAfter time.Time,
+	extKeyUsage []x509.ExtKeyUsage, dnsNames []string, ipAddresses []net.IP, keyType testKeyType) *testCert {
 	t.Helper()
 	return newTestCert(t, testCertOptions{
 		CommonName:  commonName,
@@ -125,9 +183,53 @@ func newTestServerLeaf(t *testing.T, commonName string, parent *testCert, notBef
 		NotAfter:    notAfter,
 		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage: extKeyUsage,
-		DNSNames:    []string{"localhost"},
-		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+		DNSNames:    dnsNames,
+		IPAddresses: ipAddresses,
+		KeyType:     keyType,
 	}, parent)
+}
+
+func newTestClientLeaf(t *testing.T, commonName string, parent *testCert, notBefore, notAfter time.Time,
+	extKeyUsage []x509.ExtKeyUsage, keyType testKeyType) *testCert {
+	t.Helper()
+	return newTestCert(t, testCertOptions{
+		CommonName:  commonName,
+		NotBefore:   notBefore,
+		NotAfter:    notAfter,
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: extKeyUsage,
+		KeyType:     keyType,
+	}, parent)
+}
+
+// testCertPool 用给定证书构建客户端信任库（通常传入根 CA）。
+func testCertPool(t *testing.T, certs ...*testCert) *x509.CertPool {
+	t.Helper()
+	pool := x509.NewCertPool()
+	for _, cert := range certs {
+		pool.AddCert(cert.Certificate)
+	}
+	return pool
+}
+
+// testClientTLSConfig 构建用于真实握手的客户端配置。
+// chain 的第一项是叶证书，其余项按顺序作为客户端证书链发送。
+func testClientTLSConfig(t *testing.T, roots *x509.CertPool, serverName string, chain ...*testCert) *tls.Config {
+	t.Helper()
+	config := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    roots,
+		ServerName: serverName,
+	}
+	if len(chain) > 0 {
+		leaf := chain[0]
+		certificate := tls.Certificate{PrivateKey: leaf.Key}
+		for _, cert := range chain {
+			certificate.Certificate = append(certificate.Certificate, cert.Certificate.Raw)
+		}
+		config.Certificates = []tls.Certificate{certificate}
+	}
+	return config
 }
 
 func pemForCerts(certs ...*testCert) []byte {

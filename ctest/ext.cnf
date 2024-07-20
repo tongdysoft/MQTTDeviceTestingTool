@@ -1,0 +1,9 @@
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature
+extendedKeyUsage = serverAuth
+subjectAltName = @alt
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+[ alt ]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
