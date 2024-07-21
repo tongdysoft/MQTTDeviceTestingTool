@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,7 +11,6 @@ import (
 
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
-	"github.com/mochi-mqtt/server/v2/listeners"
 )
 
 const defaultAuthData = `
@@ -27,6 +27,10 @@ type StartOptions struct {
 	Config    *Config
 	UserData  []byte
 	LogWriter io.Writer
+	// Diagnostics 可选。未提供时 StartServer 按 Config 创建，
+	// 并把事件终端输出写到 LogWriter（未提供时为 stdout）。
+	// 传入的实例所有权交给 StartServer，随服务器一起关闭。
+	Diagnostics *Diagnostics
 }
 
 // RunningServer 表示已绑定监听器并启动事件循环的服务器。
@@ -35,6 +39,7 @@ type RunningServer struct {
 	server   *mqtt.Server
 	material *TLSMaterial
 	addr     string
+	diag     *Diagnostics
 
 	closeOnce sync.Once
 	closeErr  error
@@ -75,6 +80,30 @@ func StartServer(opts StartOptions) (*RunningServer, error) {
 	if writer == nil {
 		writer = os.Stdout
 	}
+	diag := opts.Diagnostics
+	if diag == nil {
+		diag, err = NewDiagnostics(DiagnosticsOptions{
+			Config: cfg,
+			RunID:  cfg.RunID,
+			Metadata: RunMetadata{
+				DeviceModel:     cfg.DeviceModel,
+				FirmwareVersion: cfg.FirmwareVersion,
+				TestCase:        cfg.TestCase,
+				Note:            cfg.Note,
+			},
+			ResultsDir: cfg.ResultsDir,
+			Terminal:   writer,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	fail := func(startErr error) (*RunningServer, error) {
+		if closeErr := diag.Close(); closeErr != nil {
+			return nil, errors.Join(startErr, closeErr)
+		}
+		return nil, startErr
+	}
 	level := new(slog.LevelVar)
 	level.Set(slog.LevelError)
 
@@ -84,24 +113,32 @@ func StartServer(opts StartOptions) (*RunningServer, error) {
 	}))
 
 	if err := server.AddHook(new(auth.Hook), &auth.Options{Data: userData}); err != nil {
-		return nil, fmt.Errorf("cannot load MQTT auth configuration: %w", err)
+		return fail(fmt.Errorf("cannot load MQTT auth configuration: %w", err))
 	}
 
-	tcp := listeners.NewTCP(listeners.Config{
-		Address:   cfg.Listen,
-		TLSConfig: tlsConfig,
-	})
+	tcp := newDiagnosticListener("", cfg.Listen, tlsConfig, diag)
 	if err := server.AddListener(tcp); err != nil {
-		return nil, fmt.Errorf("cannot listen on %s: %w", cfg.Listen, err)
+		return fail(fmt.Errorf("cannot listen on %s: %w", cfg.Listen, err))
 	}
-	if err := server.AddHook(new(MQTTHook), &MQTTHookOptions{Server: server}); err != nil {
+	// 诊断 hook 必须添加在 auth.Hook 之后：
+	// 其 OnACLCheck 只记录“前序 hook 已拒绝”的事实并返回 false，不放宽或绕过认证。
+	if err := server.AddHook(new(MQTTHook), &MQTTHookOptions{Server: server, Diagnostics: diag}); err != nil {
 		_ = server.Close()
-		return nil, fmt.Errorf("cannot initialise MQTT event hook: %w", err)
+		return fail(fmt.Errorf("cannot initialise MQTT event hook: %w", err))
+	}
+
+	// 在开始接受连接之前固定实际生效的监听地址与证书信息，
+	// 避免第一个连接的事件落在信息尚未写入的窗口里。
+	if material != nil {
+		clientAuth := material.Config.ClientAuth
+		diag.SetServerInfo(tcp.Address(), &material.Report, material.Server.Chain, &clientAuth)
+	} else {
+		diag.SetServerInfo(tcp.Address(), nil, nil, nil)
 	}
 
 	if err := server.Serve(); err != nil {
 		_ = server.Close()
-		return nil, fmt.Errorf("cannot start MQTT server: %w", err)
+		return fail(fmt.Errorf("cannot start MQTT server: %w", err))
 	}
 
 	return &RunningServer{
@@ -109,6 +146,7 @@ func StartServer(opts StartOptions) (*RunningServer, error) {
 		server:   server,
 		material: material,
 		addr:     tcp.Address(),
+		diag:     diag,
 	}, nil
 }
 
@@ -140,10 +178,17 @@ func (r *RunningServer) CertificateReport() *CertificateReport {
 	return &report
 }
 
+// Diagnostics 返回本次运行的诊断记录器。关闭服务器后其汇总为最终结果。
+func (r *RunningServer) Diagnostics() *Diagnostics {
+	return r.diag
+}
+
 // Close 关闭监听器、客户端和服务器事件循环，可重复调用。
 func (r *RunningServer) Close() error {
 	r.closeOnce.Do(func() {
-		r.closeErr = r.server.Close()
+		serverErr := r.server.Close()
+		diagErr := r.diag.Close()
+		r.closeErr = errors.Join(serverErr, diagErr)
 	})
 	return r.closeErr
 }

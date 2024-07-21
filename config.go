@@ -57,6 +57,18 @@ type Config struct {
 	ShowVersion   bool
 	Language      string
 
+	// 诊断与结果导出。
+	RunID            string
+	DeviceModel      string
+	FirmwareVersion  string
+	TestCase         string
+	Note             string
+	ResultsDir       string
+	LogPayload       bool
+	ExpectTLS        string
+	ExpectConnect    string
+	ExpectClientCert string
+
 	// tlsVersionsSet 记录用户是否显式传入 TLS 版本参数。
 	tlsVersionsSet bool
 }
@@ -64,11 +76,14 @@ type Config struct {
 // ParseConfig 解析命令行参数并完成全部静态校验，不启动服务、不退出进程。
 func ParseConfig(args []string) (*Config, error) {
 	cfg := &Config{
-		Listen:        defaultListen,
-		Mode:          ModePlain,
-		TLSMinVersion: defaultTLSMin,
-		TLSMaxVersion: defaultTLSMax,
-		Language:      defaultLanguage,
+		Listen:           defaultListen,
+		Mode:             ModePlain,
+		TLSMinVersion:    defaultTLSMin,
+		TLSMaxVersion:    defaultTLSMax,
+		Language:         defaultLanguage,
+		ExpectTLS:        expectationAny,
+		ExpectConnect:    expectationAny,
+		ExpectClientCert: expectationAny,
 	}
 
 	fs := flag.NewFlagSet("mqtt-test-server", flag.ContinueOnError)
@@ -99,6 +114,16 @@ func ParseConfig(args []string) (*Config, error) {
 	fs.BoolVar(&cfg.Monochrome, "monochrome", false, "Use a monochrome color scheme")
 	fs.StringVar(&cfg.Language, "lang", defaultLanguage, "Language: auto, en, chs")
 	fs.BoolVar(&cfg.ShowVersion, "version", false, "Print version info and exit")
+	fs.StringVar(&cfg.RunID, "run-id", "", "Run identifier (default: generated)")
+	fs.StringVar(&cfg.DeviceModel, "device-model", "", "Device model for the run summary")
+	fs.StringVar(&cfg.FirmwareVersion, "firmware", "", "Device firmware version for the run summary")
+	fs.StringVar(&cfg.TestCase, "test-case", "", "Test case identifier for the run summary")
+	fs.StringVar(&cfg.Note, "note", "", "Free-form operator note for the run summary")
+	fs.StringVar(&cfg.ResultsDir, "results", "", "Write events.jsonl and summary.json into this directory")
+	fs.BoolVar(&cfg.LogPayload, "log-payload", false, "Include application payloads in diagnostic events (default: off)")
+	fs.StringVar(&cfg.ExpectTLS, "expect-tls", expectationAny, "Expected TLS outcome: any, success, failure")
+	fs.StringVar(&cfg.ExpectConnect, "expect-connect", expectationAny, "Expected MQTT authentication outcome: any, accepted, rejected")
+	fs.StringVar(&cfg.ExpectClientCert, "expect-client-cert", expectationAny, "Expected verified device certificate: any, present, absent")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("invalid arguments: %w", err)
@@ -168,6 +193,25 @@ func (c *Config) Validate() error {
 	if err := validateListenAddress(c.Listen); err != nil {
 		return err
 	}
+	if c.RunID != "" {
+		if err := validateRunID(c.RunID); err != nil {
+			return err
+		}
+	}
+	if err := validateExpectations(Expectations{
+		TLS:               c.ExpectTLS,
+		MQTTConnect:       c.ExpectConnect,
+		ClientCertificate: c.ExpectClientCert,
+	}); err != nil {
+		return err
+	}
+	if c.ResultsDir != "" {
+		if info, err := os.Stat(c.ResultsDir); err == nil && !info.IsDir() {
+			return fmt.Errorf("-results path is not a directory: %s", c.ResultsDir)
+		} else if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("cannot access -results path %s: %w", c.ResultsDir, err)
+		}
+	}
 
 	switch c.Language {
 	case "auto", "en", "chs":
@@ -211,6 +255,9 @@ func (c *Config) applyDefaults() {
 	if c.Language == "" {
 		c.Language = defaultLanguage
 	}
+	c.ExpectTLS = normalizeExpectation(c.ExpectTLS, "tls", []string{expectationAny, "success", "failure"})
+	c.ExpectConnect = normalizeExpectation(c.ExpectConnect, "mqtt connect", []string{expectationAny, "accepted", "rejected"})
+	c.ExpectClientCert = normalizeExpectation(c.ExpectClientCert, "client certificate", []string{expectationAny, "present", "absent"})
 }
 
 // ParseTLSVersion 把用户可读的版本号转换为 crypto/tls 常量。

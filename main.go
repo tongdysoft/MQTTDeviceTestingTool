@@ -107,10 +107,19 @@ func main() {
 	}()
 
 	logEffectiveConfig(server)
+	logPrint("C", fmt.Sprintf("%s: %s", lang("RUNID"), server.Diagnostics().RunID()))
+	if eventsPath, summaryPath := server.Diagnostics().ResultsPaths(); eventsPath != "" {
+		logPrint("C", fmt.Sprintf("%s: %s (%s, %s)", lang("RESULTS"), cfg.ResultsDir, eventsPath, summaryPath))
+	}
 	logPrint("I", lang("BOOTOK"))
 
 	<-done
 	logPrint("X", fmt.Sprintf("%s: %s", lang("NEEDSTOP"), server.Addr()))
+	if err := server.Close(); err != nil {
+		logPrint("X", fmt.Sprintf("%s: %v", lang("EXPORTFAIL"), err))
+		closeLogFiles()
+		os.Exit(1)
+	}
 	closeLogFiles()
 	logPrint("I", lang("END"))
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -47,6 +48,19 @@ type testServerSpec struct {
 	// AllowInvalidServerCert 是既定的反例测试通道，只放行服务器证书语义检查，
 	// 不改变客户端验证逻辑，也不改变 ClientAuth。
 	AllowInvalidServerCert bool
+
+	// 诊断与结果导出（测试用）。
+	ResultsDir       string
+	ExpectTLS        string
+	ExpectConnect    string
+	ExpectClientCert string
+	RunID            string
+	DeviceModel      string
+	FirmwareVersion  string
+	TestCase         string
+	Note             string
+	// DiagnosticWriter 用于断言终端输出；为空时丢弃。
+	DiagnosticWriter io.Writer
 }
 
 // startTestServer 启动真实 MQTT 服务并返回实际绑定地址。
@@ -88,7 +102,39 @@ func startTestServer(t *testing.T, spec testServerSpec) (*RunningServer, string)
 	}
 
 	logs := &synchronizedBuffer{}
-	server, err := StartServer(StartOptions{Config: cfg, UserData: spec.Users, LogWriter: logs})
+	cfg.ResultsDir = spec.ResultsDir
+	cfg.ExpectTLS = spec.ExpectTLS
+	cfg.ExpectConnect = spec.ExpectConnect
+	cfg.ExpectClientCert = spec.ExpectClientCert
+	cfg.RunID = spec.RunID
+	cfg.DeviceModel = spec.DeviceModel
+	cfg.FirmwareVersion = spec.FirmwareVersion
+	cfg.TestCase = spec.TestCase
+	cfg.Note = spec.Note
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate test config: %v", err)
+	}
+	diagnosticWriter := spec.DiagnosticWriter
+	if diagnosticWriter == nil {
+		diagnosticWriter = io.Discard
+	}
+	diag, err := NewDiagnostics(DiagnosticsOptions{
+		Config:     cfg,
+		RunID:      cfg.RunID,
+		ResultsDir: cfg.ResultsDir,
+		Metadata: RunMetadata{
+			DeviceModel:     cfg.DeviceModel,
+			FirmwareVersion: cfg.FirmwareVersion,
+			TestCase:        cfg.TestCase,
+			Note:            cfg.Note,
+		},
+		Terminal:    diagnosticWriter,
+		ErrorWriter: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("create test diagnostics: %v", err)
+	}
+	server, err := StartServer(StartOptions{Config: cfg, UserData: spec.Users, LogWriter: logs, Diagnostics: diag})
 	if err != nil {
 		t.Fatalf("StartServer(%s): %v", spec.Mode, err)
 	}
