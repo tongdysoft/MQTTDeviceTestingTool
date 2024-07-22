@@ -7,7 +7,7 @@
 This tool can help you test the stability of your device's MQTT connection.
 
 - version: `1.5.5`
-- golang version: `1.21`
+- golang version: `1.22.3`
 
 ## Function
 
@@ -73,15 +73,15 @@ General options:
 - `-listen IP:port`
   - Listening address (default `0.0.0.0:1883`). Port `0` selects an ephemeral port; the actual address is printed at startup.
 - `-users path-string`
-  - [Users and permissions file](#examples-of-user-and-rights-profiles) (.yaml/.json) path.
-- `-only-client-id string`
-  - Only allow these client IDs (comma separated).
-- `-only-topic string`
-  - Only allow these topics (comma separated).
-- `-only-payload string`
-  - Only allow messages containing these words (comma separated).
+  - [Users and permissions file](#examples-of-user-and-rights-profiles) (.yaml/.json) path. This is the actual authentication/ACL configuration.
+- `-record-only-client-id string`
+  - Only record message data from these client IDs (comma separated). This is a recording filter: it does **not** block connections and is not an access-control policy.
+- `-record-only-topic string`
+  - Only record message data on these topics (comma separated). It does not block publish or subscribe.
+- `-record-only-payload string`
+  - Only record messages containing these words (comma separated). It does not affect delivery.
 - `-log-data path-string`
-  - Log message data to a CSV file.
+  - Log message data to a CSV file. The file is truncated at startup; unexpected write failures are reported and counted.
 - `-log-status path-string`
   - Log state changes to a CSV file.
 - `-log path-string`
@@ -95,7 +95,20 @@ General options:
 - `-version`
   - Print version info and exit.
 
-TLS or configuration errors stop startup with a non-zero exit code. The server never downgrades from TLS/mTLS to plain TCP or weakens client certificate verification automatically. The startup summary prints the effective mode, bound address, TLS version range and whether device certificates are required and verified.
+Connection lifecycle options:
+
+- `-handshake-timeout duration`
+  - Maximum time for a TLS handshake (default `10s`). A client that does not finish the handshake is disconnected and recorded with its observed failure classification.
+- `-connect-timeout duration`
+  - Maximum time from accept (or from a completed TLS handshake) until an MQTT CONNECT packet is received (default `30s`). This bounds silent TCP/TLS connections that never speak MQTT.
+- `-max-handshakes n`
+  - Maximum number of concurrent TLS handshakes (default `64`, range `1`-`4096`). Additional connections wait in the listen backlog; the limit covers the handshake phase only, not established MQTT sessions.
+- `-shutdown-timeout duration`
+  - Maximum time to wait for existing connections to finish and for pending diagnostic output to flush during shutdown (default `10s`). On timeout the shutdown returns an error instead of blocking forever.
+- `-pprof-listen address`
+  - Disabled by default. When set, starts the pprof HTTP diagnostics listener on this address (for example `127.0.0.1:6060`). Binding a non-loopback address produces a warning; the listener is stopped during shutdown.
+
+TLS, configuration, log-file or debug-listener errors stop startup with a non-zero exit code. The server never downgrades from TLS/mTLS to plain TCP or weakens client certificate verification automatically. The startup summary prints the effective mode, bound address, TLS version range and whether device certificates are required and verified.
 
 ### Examples of User and Rights Profiles
 
@@ -234,15 +247,15 @@ TLS 参数：
 - `-listen IP:端口`
   - 监听地址（默认 `0.0.0.0:1883`）。端口 `0` 表示由系统分配动态端口，启动时会显示实际地址。
 - `-users 文件路径`
-  - [用户和主题权限配置文件](#用户和主题权限配置文件示例) (.yaml/.json) 路径。
-- `-only-client-id 字符串`
-  - 只允许客户端 ID 为这些的客户端（使用 `,` 分隔）。
-- `-only-topic 字符串`
-  - 只接收这些主题的信息（使用 `,` 分隔）。
-- `-only-payload 字符串`
-  - 只有消息内容包含这些关键词才会处理（使用 `,` 分隔）。
+  - [用户和主题权限配置文件](#用户和主题权限配置文件示例) (.yaml/.json) 路径。真正的认证与 ACL 访问控制由该文件负责。
+- `-record-only-client-id 字符串`
+  - 只记录这些客户端 ID 的消息内容（使用 `,` 分隔）。这是记录过滤器，**不会**阻止连接，也不代表访问控制。
+- `-record-only-topic 字符串`
+  - 只记录这些主题的消息内容（使用 `,` 分隔）。不会阻止发布或订阅。
+- `-record-only-payload 字符串`
+  - 只有消息内容包含这些关键词才会记录（使用 `,` 分隔）。不影响消息投递。
 - `-log-data 文件路径`
-  - 将收取到的消息保存到 .csv 文件。
+  - 将收取到的消息保存到 .csv 文件。启动时会截断旧文件；写入失败会被报告并计数。
 - `-log-status 文件路径`
   - 将客户端的连接、断开、订阅、退订等行为保存到 .csv 文件。
 - `-log 文件路径`
@@ -256,7 +269,20 @@ TLS 参数：
 - `-version`
   - 显示版本号等信息并退出。
 
-TLS 或配置错误会以非零退出码终止启动。程序不会从 TLS/mTLS 自动降级为明文，也不会自动放宽设备证书验证。启动摘要会显示实际生效的模式、监听地址、TLS 版本范围，以及是否强制验证设备证书。
+连接生命周期参数：
+
+- `-handshake-timeout 时长`
+  - TLS 握手的最长等待时间（默认 `10s`）。超时的客户端会被断开，并按可观察到的失败类型记录。
+- `-connect-timeout 时长`
+  - 从接入（或 TLS 握手完成）到收到 MQTT CONNECT 的最长等待时间（默认 `30s`）。用于关闭始终不发送 MQTT 报文的静默连接。
+- `-max-handshakes 数量`
+  - 最大并发 TLS 握手数（默认 `64`，范围 `1`-`4096`）。超出的连接在监听 backlog 中排队；该限制只覆盖握手阶段，不限制已建立的 MQTT 会话。
+- `-shutdown-timeout 时长`
+  - 关闭时等待现有连接结束与诊断输出刷盘的最长时间（默认 `10s`）。超时会返回错误，而不是无限阻塞。
+- `-pprof-listen 地址`
+  - 默认关闭。设置后在指定地址启动 pprof HTTP 诊断监听（例如 `127.0.0.1:6060`）。绑定非回环地址会输出警告；退出时会一并关闭。
+
+TLS、配置、日志文件或调试监听错误会以非零退出码终止启动。程序不会从 TLS/mTLS 自动降级为明文，也不会自动放宽设备证书验证。启动摘要会显示实际生效的模式、监听地址、TLS 版本范围，以及是否强制验证设备证书。
 
 ### 真实设备测试证书（OpenSSL 脚本）
 

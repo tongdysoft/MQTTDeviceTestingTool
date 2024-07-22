@@ -61,6 +61,16 @@ type testServerSpec struct {
 	Note             string
 	// DiagnosticWriter 用于断言终端输出；为空时丢弃。
 	DiagnosticWriter io.Writer
+
+	// 连接生命周期与记录过滤（零值使用默认值）。
+	HandshakeTimeout        time.Duration
+	ConnectTimeout          time.Duration
+	ShutdownTimeout         time.Duration
+	MaxConcurrentHandshakes int
+	RecordOnlyClientIDs     []string
+	RecordOnlyTopics        []string
+	RecordOnlyPayloads      []string
+	LogPayload              bool
 }
 
 // startTestServer 启动真实 MQTT 服务并返回实际绑定地址。
@@ -111,6 +121,14 @@ func startTestServer(t *testing.T, spec testServerSpec) (*RunningServer, string)
 	cfg.FirmwareVersion = spec.FirmwareVersion
 	cfg.TestCase = spec.TestCase
 	cfg.Note = spec.Note
+	cfg.HandshakeTimeout = spec.HandshakeTimeout
+	cfg.ConnectTimeout = spec.ConnectTimeout
+	cfg.ShutdownTimeout = spec.ShutdownTimeout
+	cfg.MaxConcurrentHandshakes = spec.MaxConcurrentHandshakes
+	cfg.RecordOnlyClientIDs = spec.RecordOnlyClientIDs
+	cfg.RecordOnlyTopics = spec.RecordOnlyTopics
+	cfg.RecordOnlyPayloads = spec.RecordOnlyPayloads
+	cfg.LogPayload = spec.LogPayload
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("validate test config: %v", err)
 	}

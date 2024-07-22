@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -27,6 +28,10 @@ type StartOptions struct {
 	Config    *Config
 	UserData  []byte
 	LogWriter io.Writer
+	// EventLog 为空时不写 CSV/文本日志；诊断事件不受影响。
+	EventLog *EventLog
+	// Context 只用于在启动阶段感知取消；服务运行期间由调用方通过 Close 停止。
+	Context context.Context
 	// Diagnostics 可选。未提供时 StartServer 按 Config 创建，
 	// 并把事件终端输出写到 LogWriter（未提供时为 stdout）。
 	// 传入的实例所有权交给 StartServer，随服务器一起关闭。
@@ -40,6 +45,7 @@ type RunningServer struct {
 	material *TLSMaterial
 	addr     string
 	diag     *Diagnostics
+	listener *diagnosticListener
 
 	closeOnce sync.Once
 	closeErr  error
@@ -54,6 +60,15 @@ func StartServer(opts StartOptions) (*RunningServer, error) {
 	cfg := opts.Config
 	if err := cfg.Validate(); err != nil {
 		return nil, err
+	}
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
 	}
 	material, err := cfg.BuildTLSMaterial()
 	if err != nil {
@@ -116,13 +131,26 @@ func StartServer(opts StartOptions) (*RunningServer, error) {
 		return fail(fmt.Errorf("cannot load MQTT auth configuration: %w", err))
 	}
 
-	tcp := newDiagnosticListener("", cfg.Listen, tlsConfig, diag)
+	tcp := newDiagnosticListener(listenerOptions{
+		address:          cfg.Listen,
+		tlsConfig:        tlsConfig,
+		diagnostics:      diag,
+		handshakeTimeout: cfg.HandshakeTimeout,
+		connectTimeout:   cfg.ConnectTimeout,
+		maxHandshakes:    cfg.MaxConcurrentHandshakes,
+		shutdownTimeout:  cfg.ShutdownTimeout,
+	})
 	if err := server.AddListener(tcp); err != nil {
 		return fail(fmt.Errorf("cannot listen on %s: %w", cfg.Listen, err))
 	}
 	// 诊断 hook 必须添加在 auth.Hook 之后：
 	// 其 OnACLCheck 只记录“前序 hook 已拒绝”的事实并返回 false，不放宽或绕过认证。
-	if err := server.AddHook(new(MQTTHook), &MQTTHookOptions{Server: server, Diagnostics: diag}); err != nil {
+	if err := server.AddHook(new(MQTTHook), &MQTTHookOptions{
+		Server:      server,
+		Diagnostics: diag,
+		EventLog:    opts.EventLog,
+		Filter:      cfg.NewRecordFilter(),
+	}); err != nil {
 		_ = server.Close()
 		return fail(fmt.Errorf("cannot initialise MQTT event hook: %w", err))
 	}
@@ -147,6 +175,7 @@ func StartServer(opts StartOptions) (*RunningServer, error) {
 		material: material,
 		addr:     tcp.Address(),
 		diag:     diag,
+		listener: tcp,
 	}, nil
 }
 
@@ -183,12 +212,14 @@ func (r *RunningServer) Diagnostics() *Diagnostics {
 	return r.diag
 }
 
-// Close 关闭监听器、客户端和服务器事件循环，可重复调用。
+// Close 停止接收新连接、关闭现有连接、等待清理并完成结果导出，可重复调用。
+// 等待时间受 -shutdown-timeout 限制；超时会作为错误返回，而不是无限阻塞。
 func (r *RunningServer) Close() error {
 	r.closeOnce.Do(func() {
 		serverErr := r.server.Close()
+		listenerErr := r.listener.CloseError()
 		diagErr := r.diag.Close()
-		r.closeErr = errors.Join(serverErr, diagErr)
+		r.closeErr = errors.Join(serverErr, listenerErr, diagErr)
 	})
 	return r.closeErr
 }

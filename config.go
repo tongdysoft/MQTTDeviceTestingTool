@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -16,6 +17,12 @@ const (
 	defaultTLSMin   = "1.2"
 	defaultTLSMax   = "1.3"
 	defaultLanguage = "auto"
+
+	defaultHandshakeTimeout        = 10 * time.Second
+	defaultConnectTimeout          = 30 * time.Second
+	defaultShutdownTimeout         = 10 * time.Second
+	defaultMaxConcurrentHandshakes = 64
+	maxConcurrentHandshakesLimit   = 4096
 )
 
 // SecurityMode 是启动时明确选择的连接安全模式。
@@ -45,9 +52,20 @@ type Config struct {
 
 	UserFile string
 
-	OnlyClientIDs []string
-	OnlyTopics    []string
-	OnlyPayloads  []string
+	// RecordOnly* 只限制写入 CSV 与诊断事件的消息内容，不影响连接、
+	// 认证、订阅或发布；真正的访问控制由 -users 的 auth/acl 配置负责。
+	RecordOnlyClientIDs []string
+	RecordOnlyTopics    []string
+	RecordOnlyPayloads  []string
+
+	// 连接生命周期。零值会在 Validate 中补默认值。
+	HandshakeTimeout        time.Duration
+	ConnectTimeout          time.Duration
+	ShutdownTimeout         time.Duration
+	MaxConcurrentHandshakes int
+
+	// DebugHTTPListen 为空表示不启动 pprof HTTP 监听。
+	DebugHTTPListen string
 
 	LogDataFile   string
 	LogStatusFile string
@@ -89,10 +107,10 @@ func ParseConfig(args []string) (*Config, error) {
 	fs := flag.NewFlagSet("mqtt-test-server", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var (
-		mode          string
-		onlyClientIDs string
-		onlyTopics    string
-		onlyPayloads  string
+		mode            string
+		recordClientIDs string
+		recordTopics    string
+		recordPayloads  string
 	)
 	fs.StringVar(&cfg.Listen, "listen", defaultListen, "Listen address (IP:port)")
 	fs.StringVar(&mode, "mode", string(ModePlain), "Security mode: plain, tls, mtls")
@@ -103,10 +121,15 @@ func ParseConfig(args []string) (*Config, error) {
 	fs.StringVar(&cfg.TLSMinVersion, "tls-min", defaultTLSMin, "Minimum TLS version: 1.2 or 1.3")
 	fs.StringVar(&cfg.TLSMaxVersion, "tls-max", defaultTLSMax, "Maximum TLS version: 1.2 or 1.3")
 	fs.BoolVar(&cfg.AllowInvalidServerCert, "allow-invalid-server-cert", false, "Allow semantic-only server certificate problems (expiry, EKU/key usage, CA-as-leaf, chain expiry) for deliberate negative tests")
-	fs.StringVar(&cfg.UserFile, "users", "", "Users and permissions file (.yaml/.json)")
-	fs.StringVar(&onlyClientIDs, "only-client-id", "", "Only allow these client IDs (comma separated)")
-	fs.StringVar(&onlyTopics, "only-topic", "", "Only allow these topics (comma separated)")
-	fs.StringVar(&onlyPayloads, "only-payload", "", "Only allow messages containing these words (comma separated)")
+	fs.StringVar(&cfg.UserFile, "users", "", "Users and permissions file (.yaml/.json); this is the access-control configuration")
+	fs.StringVar(&recordClientIDs, "record-only-client-id", "", "Only record message data from these client IDs (comma separated; does not block connections)")
+	fs.StringVar(&recordTopics, "record-only-topic", "", "Only record message data on these topics (comma separated; does not block publish/subscribe)")
+	fs.StringVar(&recordPayloads, "record-only-payload", "", "Only record messages containing these words (comma separated; does not block delivery)")
+	fs.DurationVar(&cfg.HandshakeTimeout, "handshake-timeout", defaultHandshakeTimeout, "Maximum time for a TLS handshake")
+	fs.DurationVar(&cfg.ConnectTimeout, "connect-timeout", defaultConnectTimeout, "Maximum time from accept (or completed TLS handshake) until an MQTT CONNECT packet")
+	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", defaultShutdownTimeout, "Maximum time to wait for connections and pending output during shutdown")
+	fs.IntVar(&cfg.MaxConcurrentHandshakes, "max-handshakes", defaultMaxConcurrentHandshakes, "Maximum concurrent TLS handshakes; further connections wait in the listen backlog")
+	fs.StringVar(&cfg.DebugHTTPListen, "pprof-listen", "", "Enable pprof HTTP diagnostics on this address (disabled by default, e.g. 127.0.0.1:6060)")
 	fs.StringVar(&cfg.LogDataFile, "log-data", "", "Log message data to a CSV file")
 	fs.StringVar(&cfg.LogStatusFile, "log-status", "", "Log state changes to a CSV file")
 	fs.StringVar(&cfg.LogFile, "log", "", "Save text log to a file")
@@ -131,14 +154,37 @@ func ParseConfig(args []string) (*Config, error) {
 	if fs.NArg() > 0 {
 		return nil, fmt.Errorf("unexpected positional arguments: %s", strings.Join(fs.Args(), " "))
 	}
+	var valueErr error
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "tls-min" || f.Name == "tls-max" {
 			cfg.tlsVersionsSet = true
 		}
+		// 零值在 Config 中表示“使用默认值”，但用户显式传入的 0/负数必须报错。
+		switch f.Name {
+		case "handshake-timeout":
+			if cfg.HandshakeTimeout <= 0 {
+				valueErr = fmt.Errorf("-handshake-timeout must be greater than zero")
+			}
+		case "connect-timeout":
+			if cfg.ConnectTimeout <= 0 {
+				valueErr = fmt.Errorf("-connect-timeout must be greater than zero")
+			}
+		case "shutdown-timeout":
+			if cfg.ShutdownTimeout <= 0 {
+				valueErr = fmt.Errorf("-shutdown-timeout must be greater than zero")
+			}
+		case "max-handshakes":
+			if cfg.MaxConcurrentHandshakes < 1 || cfg.MaxConcurrentHandshakes > maxConcurrentHandshakesLimit {
+				valueErr = fmt.Errorf("-max-handshakes must be between 1 and %d", maxConcurrentHandshakesLimit)
+			}
+		}
 	})
-	cfg.OnlyClientIDs = splitList(onlyClientIDs)
-	cfg.OnlyTopics = splitList(onlyTopics)
-	cfg.OnlyPayloads = splitList(onlyPayloads)
+	if valueErr != nil {
+		return nil, valueErr
+	}
+	cfg.RecordOnlyClientIDs = splitList(recordClientIDs)
+	cfg.RecordOnlyTopics = splitList(recordTopics)
+	cfg.RecordOnlyPayloads = splitList(recordPayloads)
 	cfg.Mode = SecurityMode(strings.ToLower(strings.TrimSpace(mode)))
 
 	if err := cfg.Validate(); err != nil {
@@ -193,6 +239,23 @@ func (c *Config) Validate() error {
 	if err := validateListenAddress(c.Listen); err != nil {
 		return err
 	}
+	if c.HandshakeTimeout <= 0 {
+		return fmt.Errorf("-handshake-timeout must be greater than zero")
+	}
+	if c.ConnectTimeout <= 0 {
+		return fmt.Errorf("-connect-timeout must be greater than zero")
+	}
+	if c.ShutdownTimeout <= 0 {
+		return fmt.Errorf("-shutdown-timeout must be greater than zero")
+	}
+	if c.MaxConcurrentHandshakes < 1 || c.MaxConcurrentHandshakes > maxConcurrentHandshakesLimit {
+		return fmt.Errorf("-max-handshakes must be between 1 and %d", maxConcurrentHandshakesLimit)
+	}
+	if c.DebugHTTPListen != "" {
+		if err := validateListenAddress(c.DebugHTTPListen); err != nil {
+			return fmt.Errorf("invalid -pprof-listen: %w", err)
+		}
+	}
 	if c.RunID != "" {
 		if err := validateRunID(c.RunID); err != nil {
 			return err
@@ -211,6 +274,9 @@ func (c *Config) Validate() error {
 		} else if err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("cannot access -results path %s: %w", c.ResultsDir, err)
 		}
+	}
+	if err := validateDistinctLogPaths(c.LogFile, c.LogStatusFile, c.LogDataFile); err != nil {
+		return err
 	}
 
 	switch c.Language {
@@ -255,6 +321,18 @@ func (c *Config) applyDefaults() {
 	if c.Language == "" {
 		c.Language = defaultLanguage
 	}
+	if c.HandshakeTimeout == 0 {
+		c.HandshakeTimeout = defaultHandshakeTimeout
+	}
+	if c.ConnectTimeout == 0 {
+		c.ConnectTimeout = defaultConnectTimeout
+	}
+	if c.ShutdownTimeout == 0 {
+		c.ShutdownTimeout = defaultShutdownTimeout
+	}
+	if c.MaxConcurrentHandshakes == 0 {
+		c.MaxConcurrentHandshakes = defaultMaxConcurrentHandshakes
+	}
 	c.ExpectTLS = normalizeExpectation(c.ExpectTLS, "tls", []string{expectationAny, "success", "failure"})
 	c.ExpectConnect = normalizeExpectation(c.ExpectConnect, "mqtt connect", []string{expectationAny, "accepted", "rejected"})
 	c.ExpectClientCert = normalizeExpectation(c.ExpectClientCert, "client certificate", []string{expectationAny, "present", "absent"})
@@ -297,6 +375,20 @@ func validateListenAddress(address string) error {
 	return nil
 }
 
+func validateDistinctLogPaths(paths ...string) error {
+	seen := map[string]struct{}{}
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		if _, exists := seen[path]; exists {
+			return fmt.Errorf("log files must use distinct paths: %s", path)
+		}
+		seen[path] = struct{}{}
+	}
+	return nil
+}
+
 func validateReadableFile(label, path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -323,4 +415,64 @@ func splitList(value string) []string {
 		}
 	}
 	return result
+}
+
+// RecordFilter 决定一条消息是否写入 CSV 与诊断负载。
+// 它不参与认证或授权，不会被用于允许/拒绝连接、订阅或发布。
+type RecordFilter struct {
+	clientIDs map[string]struct{}
+	topics    map[string]struct{}
+	words     []string
+}
+
+// NewRecordFilter 把配置中的记录过滤条件转换为只读集合。
+func (c *Config) NewRecordFilter() RecordFilter {
+	filter := RecordFilter{}
+	if len(c.RecordOnlyClientIDs) > 0 {
+		filter.clientIDs = make(map[string]struct{}, len(c.RecordOnlyClientIDs))
+		for _, id := range c.RecordOnlyClientIDs {
+			filter.clientIDs[id] = struct{}{}
+		}
+	}
+	if len(c.RecordOnlyTopics) > 0 {
+		filter.topics = make(map[string]struct{}, len(c.RecordOnlyTopics))
+		for _, topic := range c.RecordOnlyTopics {
+			filter.topics[topic] = struct{}{}
+		}
+	}
+	filter.words = append(filter.words, c.RecordOnlyPayloads...)
+	return filter
+}
+
+// Empty 表示没有任何记录过滤条件。
+func (f RecordFilter) Empty() bool {
+	return len(f.clientIDs) == 0 && len(f.topics) == 0 && len(f.words) == 0
+}
+
+// Matches 判断消息内容是否应被记录。多个条件同时存在时必须全部满足。
+func (f RecordFilter) Matches(clientID, topic string, payload []byte) bool {
+	if len(f.clientIDs) > 0 {
+		if _, ok := f.clientIDs[clientID]; !ok {
+			return false
+		}
+	}
+	if len(f.topics) > 0 {
+		if _, ok := f.topics[topic]; !ok {
+			return false
+		}
+	}
+	if len(f.words) > 0 {
+		text := string(payload)
+		matched := false
+		for _, word := range f.words {
+			if strings.Contains(text, word) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }

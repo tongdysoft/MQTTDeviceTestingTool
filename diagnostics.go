@@ -90,6 +90,9 @@ const (
 	maxInMemory     = 20000
 	maxReasonRunes  = 600
 	maxPayloadBytes = 4096
+	// terminalQueueSize 限制尚未显示的终端行数量。终端只是展示副本，
+	// 队列满时丢弃并计数；JSONL 与内存事件仍然完整写入。
+	terminalQueueSize = 1024
 )
 
 // Event 是写入 JSONL 的单条诊断事件。
@@ -183,6 +186,8 @@ type EventCounts struct {
 	TransportClosed   uint64 `json:"transport_closed"`
 	DroppedMemory     uint64 `json:"dropped_in_memory_events"`
 	DroppedStructured uint64 `json:"dropped_structured_events"`
+	// DroppedTerminal 只统计未显示的终端行；事件文件与内存记录不受影响。
+	DroppedTerminal uint64 `json:"dropped_terminal_events"`
 }
 
 // EffectiveConfig 是实际生效配置的非敏感摘要。
@@ -286,7 +291,7 @@ type Diagnostics struct {
 	metadata     RunMetadata
 	expectations Expectations
 	now          func() time.Time
-	terminal     io.Writer
+	terminalOut  *terminalWriter
 	errorWriter  io.Writer
 	logPayload   bool
 
@@ -402,12 +407,16 @@ func NewDiagnostics(opts DiagnosticsOptions) (*Diagnostics, error) {
 		return nil, err
 	}
 
+	shutdownTimeout := defaultShutdownTimeout
+	if opts.Config != nil && opts.Config.ShutdownTimeout > 0 {
+		shutdownTimeout = opts.Config.ShutdownTimeout
+	}
 	d := &Diagnostics{
 		runID:        runID,
 		metadata:     opts.Metadata,
 		expectations: expectations,
 		now:          now,
-		terminal:     terminal,
+		terminalOut:  newTerminalWriter(terminal, shutdownTimeout),
 		errorWriter:  errorWriter,
 		startedAt:    now(),
 		byID:         map[string]*connectionRecord{},
@@ -1310,7 +1319,7 @@ func (d *Diagnostics) noteWriteErrorLocked(err error) {
 }
 
 func (d *Diagnostics) printEventLocked(event Event) {
-	if d.terminal == nil {
+	if d.terminalOut == nil {
 		return
 	}
 	var b strings.Builder
@@ -1381,7 +1390,85 @@ func (d *Diagnostics) printEventLocked(event Event) {
 		b.WriteString(payload)
 	}
 	b.WriteByte('\n')
-	_, _ = io.WriteString(d.terminal, b.String())
+	if !d.terminalOut.enqueue(b.String()) {
+		d.counts.DroppedTerminal++
+	}
+}
+
+// terminalWriter 串行输出诊断事件行。写入失败只影响终端显示，
+// 不会回滚已经写入 JSONL 的事件。
+type terminalWriter struct {
+	writer  io.Writer
+	queue   chan string
+	done    chan struct{}
+	timeout time.Duration
+
+	mu      sync.Mutex
+	errs    []string
+	stopped bool
+}
+
+func newTerminalWriter(writer io.Writer, timeout time.Duration) *terminalWriter {
+	t := &terminalWriter{
+		writer:  writer,
+		queue:   make(chan string, terminalQueueSize),
+		done:    make(chan struct{}),
+		timeout: timeout,
+	}
+	go t.run()
+	return t
+}
+
+func (t *terminalWriter) run() {
+	defer close(t.done)
+	for line := range t.queue {
+		if _, err := io.WriteString(t.writer, line); err != nil {
+			t.mu.Lock()
+			if len(t.errs) < 8 {
+				t.errs = append(t.errs, err.Error())
+			}
+			t.mu.Unlock()
+		}
+	}
+}
+
+// enqueue 在队列已满时立即返回 false，不阻塞连接处理。
+func (t *terminalWriter) enqueue(line string) bool {
+	select {
+	case t.queue <- line:
+		return true
+	default:
+		return false
+	}
+}
+
+// stop 关闭队列并等待排空；超时或写入错误会作为摘要返回。
+func (t *terminalWriter) stop() []string {
+	t.mu.Lock()
+	if !t.stopped {
+		t.stopped = true
+		close(t.queue)
+	}
+	t.mu.Unlock()
+
+	var messages []string
+	if t.timeout > 0 {
+		timer := time.NewTimer(t.timeout)
+		defer timer.Stop()
+		select {
+		case <-t.done:
+		case <-timer.C:
+			messages = append(messages, fmt.Sprintf("terminal output did not flush within %s", t.timeout))
+		}
+	} else {
+		<-t.done
+	}
+	t.mu.Lock()
+	for _, errText := range t.errs {
+		messages = append(messages, "terminal output: "+errText)
+	}
+	t.mu.Unlock()
+	return messages
 }
 
 // Events 返回内存中的事件副本（可能因上限丢弃最旧事件）。
@@ -1423,6 +1510,17 @@ func (d *Diagnostics) finalize() error {
 	})
 	d.closed = true
 	d.endedAt = d.now()
+	if d.terminalOut != nil {
+		for _, message := range d.terminalOut.stop() {
+			d.noteWriteErrorLocked(errors.New(message))
+		}
+		d.terminalOut = nil
+	}
+	if d.counts.DroppedTerminal > 0 {
+		d.noteWriteErrorLocked(fmt.Errorf(
+			"terminal output queue overflow: %d event(s) not displayed; structured events remain complete",
+			d.counts.DroppedTerminal))
+	}
 	summary := d.buildSummaryLocked()
 
 	summary.Output.Status = OutputNotRequested

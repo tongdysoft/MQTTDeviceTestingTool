@@ -2,10 +2,9 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
@@ -15,43 +14,27 @@ import (
 	"github.com/cloudfoundry/jibber_jabber"
 )
 
-const version = "1.5.5"
-
-var (
-	language      string
-	timeFormat    string = "2006-01-02 15:04:05"
-	logFile       string
-	logData       string
-	logStatus     string
-	logFileE      bool = false
-	logDataE      bool = false
-	logStatusE    bool = false
-	fileTimestamp bool = false
-	logFileF      *os.File
-	logDataF      *os.File
-	logStatusF    *os.File
-	monochrome    bool = false
-	isWindows     bool = runtime.GOOS == "windows"
-
-	onlyIdE      bool     = false
-	onlyTopicE   bool     = false
-	onlyPayloadE bool     = false
-	onlyIdS      []string = []string{}
-	onlyTopicS   []string = []string{}
-	onlyPayloadS []string = []string{}
+const (
+	version    = "1.5.5"
+	timeFormat = "2006-01-02 15:04:05"
+	isWindows  = runtime.GOOS == "windows"
 )
 
-func main() {
-	// pprof 仅用于本地诊断，失败不影响主服务。
-	go func() {
-		_ = http.ListenAndServe(":9999", nil)
-	}()
+// language 只在启动最早阶段写入一次，之后由所有 goroutine 只读。
+var language string
 
+func main() {
+	os.Exit(run())
+}
+
+// run 负责参数解析、信号、启动与退出码。进程信号只在这里处理，
+// 服务器与测试接口本身不接触 os.Signal 或 os.Exit。
+func run() int {
 	cfg, err := ParseConfig(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "configuration error:", err)
 		fmt.Fprintln(os.Stderr, "run without arguments to start plain MQTT; see README.md for all options")
-		os.Exit(2)
+		return 2
 	}
 
 	language = cfg.Language
@@ -63,10 +46,10 @@ func main() {
 		}
 	}
 
-	logPrint("I", lang("TITLE")+" v"+version+" for "+runtime.GOOS+" (KagurazakaYashi@Tongdy, 2024)")
-	logPrint("I", lang("HELP")+" https://github.com/tongdysoft/MQTTDeviceTestingTool")
 	if cfg.ShowVersion {
-		return
+		fmt.Printf("%s v%s for %s (KagurazakaYashi@Tongdy, 2024)\n", lang("TITLE"), version, runtime.GOOS)
+		fmt.Printf("%s https://github.com/tongdysoft/MQTTDeviceTestingTool\n", lang("HELP"))
+		return 0
 	}
 
 	if cfg.Mode != ModePlain {
@@ -77,127 +60,147 @@ func main() {
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "configuration error:", err)
-			os.Exit(2)
+			return 2
 		}
 		cfg.KeyPassword = password
 	}
 
-	applyLogOptions(cfg)
-	applyFilterOptions(cfg)
-	logInit(cfg.Listen, lang("TITLE")+" v"+version)
-
-	sigs := make(chan os.Signal, 1)
-	done := make(chan struct{})
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		close(done)
-	}()
-
-	logPrint("I", lang("BOOTING"))
-	server, err := StartServer(StartOptions{Config: cfg})
+	// 文本日志、诊断事件与 mochi 日志共享同一终端写锁。
+	terminal := newLockedWriter(os.Stdout)
+	eventLog, err := OpenEventLog(EventLogOptions{
+		Terminal:      terminal,
+		ErrorWriter:   os.Stderr,
+		TextPath:      cfg.LogFile,
+		StatusPath:    cfg.LogStatusFile,
+		DataPath:      cfg.LogDataFile,
+		FileTimestamp: cfg.FileTimestamp,
+		Monochrome:    cfg.Monochrome,
+	})
 	if err != nil {
-		logPrint("X", lang("STARTFAIL")+err.Error())
-		closeLogFiles()
-		os.Exit(1)
+		fmt.Fprintln(os.Stderr, "log error:", err)
+		return 1
+	}
+	defer func() { _ = eventLog.Close() }()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	eventLog.Print("I", lang("TITLE")+" v"+version+" for "+runtime.GOOS+" (KagurazakaYashi@Tongdy, 2024)")
+	eventLog.Print("I", lang("HELP")+" https://github.com/tongdysoft/MQTTDeviceTestingTool")
+	logRecordFilters(cfg, eventLog)
+
+	debug, err := startDebugServer(cfg.DebugHTTPListen, eventLog)
+	if err != nil {
+		eventLog.Print("X", lang("STARTFAIL")+err.Error())
+		_ = eventLog.Close()
+		return 1
 	}
 	defer func() {
-		signal.Stop(sigs)
-		_ = server.Close()
+		if err := debug.Close(cfg.ShutdownTimeout); err != nil {
+			fmt.Fprintln(os.Stderr, "debug listener:", err)
+		}
 	}()
 
-	logEffectiveConfig(server)
-	logPrint("C", fmt.Sprintf("%s: %s", lang("RUNID"), server.Diagnostics().RunID()))
+	eventLog.Print("I", lang("BOOTING"))
+	server, err := StartServer(StartOptions{Config: cfg, Context: ctx, EventLog: eventLog, LogWriter: terminal})
+	if err != nil {
+		eventLog.Print("X", lang("STARTFAIL")+err.Error())
+		if closeErr := eventLog.Close(); closeErr != nil {
+			fmt.Fprintln(os.Stderr, "log error:", closeErr)
+		}
+		return 1
+	}
+	defer func() { _ = server.Close() }()
+
+	logEffectiveConfig(server, eventLog)
+	eventLog.Print("C", fmt.Sprintf("%s: %s", lang("RUNID"), server.Diagnostics().RunID()))
 	if eventsPath, summaryPath := server.Diagnostics().ResultsPaths(); eventsPath != "" {
-		logPrint("C", fmt.Sprintf("%s: %s (%s, %s)", lang("RESULTS"), cfg.ResultsDir, eventsPath, summaryPath))
+		eventLog.Print("C", fmt.Sprintf("%s: %s (%s, %s)", lang("RESULTS"), cfg.ResultsDir, eventsPath, summaryPath))
 	}
-	logPrint("I", lang("BOOTOK"))
+	eventLog.Status(server.Addr(), lang("START"), lang("TITLE")+" v"+version)
+	eventLog.Data(server.Addr(), lang("TITLE")+" v"+version, lang("START"))
+	eventLog.Print("I", lang("BOOTOK"))
 
-	<-done
-	logPrint("X", fmt.Sprintf("%s: %s", lang("NEEDSTOP"), server.Addr()))
-	if err := server.Close(); err != nil {
-		logPrint("X", fmt.Sprintf("%s: %v", lang("EXPORTFAIL"), err))
-		closeLogFiles()
-		os.Exit(1)
+	<-ctx.Done()
+	eventLog.Print("X", fmt.Sprintf("%s: %s", lang("NEEDSTOP"), server.Addr()))
+	closeErr := server.Close()
+	if closeErr != nil {
+		eventLog.Print("X", fmt.Sprintf("%s: %v", lang("EXPORTFAIL"), closeErr))
 	}
-	closeLogFiles()
-	logPrint("I", lang("END"))
+	eventLog.Print("I", lang("END"))
+	if err := eventLog.Close(); err != nil {
+		fmt.Fprintln(os.Stderr, "log error:", err)
+		return 1
+	}
+	if closeErr != nil {
+		return 1
+	}
+	return 0
 }
 
-func applyLogOptions(cfg *Config) {
-	logFile = cfg.LogFile
-	logData = cfg.LogDataFile
-	logStatus = cfg.LogStatusFile
-	fileTimestamp = cfg.FileTimestamp
-	monochrome = cfg.Monochrome
-}
-
-func applyFilterOptions(cfg *Config) {
-	onlyIdS = nil
-	onlyTopicS = nil
-	onlyPayloadS = nil
-	onlyIdE = false
-	onlyTopicE = false
-	onlyPayloadE = false
-	if len(cfg.OnlyClientIDs) > 0 {
-		onlyIdS = cfg.OnlyClientIDs
-		onlyIdE = true
-		logPrint("C", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("CLIENT"), onlyIdS))
+func logRecordFilters(cfg *Config, eventLog *EventLog) {
+	if len(cfg.RecordOnlyClientIDs) > 0 {
+		eventLog.Print("C", fmt.Sprintf("%s%s: %s (%s)", lang("RECORDONLY"), lang("CLIENT"),
+			cfg.RecordOnlyClientIDs, lang("RECORDONLYNOTE")))
 	}
-	if len(cfg.OnlyTopics) > 0 {
-		onlyTopicS = cfg.OnlyTopics
-		onlyTopicE = true
-		logPrint("C", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("TOPIC"), onlyTopicS))
+	if len(cfg.RecordOnlyTopics) > 0 {
+		eventLog.Print("C", fmt.Sprintf("%s%s: %s (%s)", lang("RECORDONLY"), lang("TOPIC"),
+			cfg.RecordOnlyTopics, lang("RECORDONLYNOTE")))
 	}
-	if len(cfg.OnlyPayloads) > 0 {
-		onlyPayloadS = cfg.OnlyPayloads
-		onlyPayloadE = true
-		logPrint("C", fmt.Sprintf("%s%s: %s", lang("ONLY"), lang("WORD"), onlyPayloadS))
+	if len(cfg.RecordOnlyPayloads) > 0 {
+		eventLog.Print("C", fmt.Sprintf("%s%s: %s (%s)", lang("RECORDONLY"), lang("WORD"),
+			cfg.RecordOnlyPayloads, lang("RECORDONLYNOTE")))
 	}
 }
 
-// logEffectiveConfig 显示实际生效的模式、监听地址、TLS 版本和客户端证书策略。
-// 这里不输出私钥、私钥密码或任何密钥长度。
-func logEffectiveConfig(server *RunningServer) {
+// logEffectiveConfig 显示实际生效的模式、监听地址、TLS 版本、客户端证书策略
+// 与生命周期限制。这里不输出私钥、私钥密码或任何密钥长度。
+func logEffectiveConfig(server *RunningServer, eventLog *EventLog) {
 	cfg := server.Config()
-	logPrint("C", fmt.Sprintf("%s: %s", lang("MODE"), modeLabel(cfg.Mode)))
-	logPrint("C", fmt.Sprintf("%s: %s", lang("LISTENADDR"), server.Addr()))
+	eventLog.Print("C", fmt.Sprintf("%s: %s", lang("MODE"), modeLabel(cfg.Mode)))
+	eventLog.Print("C", fmt.Sprintf("%s: %s", lang("LISTENADDR"), server.Addr()))
+	eventLog.Print("C", fmt.Sprintf("%s: %s, %s: %s, %s: %d, %s: %s",
+		lang("HANDSHAKETIMEOUT"), cfg.HandshakeTimeout,
+		lang("CONNECTTIMEOUT"), cfg.ConnectTimeout,
+		lang("MAXHANDSHAKES"), cfg.MaxConcurrentHandshakes,
+		lang("SHUTDOWNTIMEOUT"), cfg.ShutdownTimeout,
+	))
 
 	tlsConfig := server.TLSConfig()
 	if tlsConfig == nil {
-		logPrint("C", fmt.Sprintf("%s: %s", lang("TLSVERSIONS"), lang("TLSDISABLED")))
-		logPrint("C", fmt.Sprintf("%s: %s", lang("CLIENTAUTH"), lang("CLIENTAUTH_NA")))
+		eventLog.Print("C", fmt.Sprintf("%s: %s", lang("TLSVERSIONS"), lang("TLSDISABLED")))
+		eventLog.Print("C", fmt.Sprintf("%s: %s", lang("CLIENTAUTH"), lang("CLIENTAUTH_NA")))
 		return
 	}
 
-	logPrint("C", fmt.Sprintf("%s: %s - %s",
+	eventLog.Print("C", fmt.Sprintf("%s: %s - %s",
 		lang("TLSVERSIONS"),
 		tls.VersionName(tlsConfig.MinVersion),
 		tls.VersionName(tlsConfig.MaxVersion),
 	))
 	if tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
-		logPrint("C", fmt.Sprintf("%s: %s", lang("CLIENTAUTH"), lang("CLIENTAUTH_REQUIRED")))
+		eventLog.Print("C", fmt.Sprintf("%s: %s", lang("CLIENTAUTH"), lang("CLIENTAUTH_REQUIRED")))
 	} else {
-		logPrint("C", fmt.Sprintf("%s: %s", lang("CLIENTAUTH"), lang("CLIENTAUTH_NONE")))
+		eventLog.Print("C", fmt.Sprintf("%s: %s", lang("CLIENTAUTH"), lang("CLIENTAUTH_NONE")))
 	}
 
 	report := server.CertificateReport()
 	if report != nil {
-		logPrint("C", fmt.Sprintf("%s: %s", lang("CERTCHAIN"), formatChainSummary(report.ServerChain)))
-		logPrint("C", fmt.Sprintf("%s: %s", lang("SERVERKEY"), report.ServerKeyFormat))
-		logPrint("C", fmt.Sprintf("%s: %s", lang("KEYPWDSOURCE"), report.ServerKeyPasswordSource))
+		eventLog.Print("C", fmt.Sprintf("%s: %s", lang("CERTCHAIN"), formatChainSummary(report.ServerChain)))
+		eventLog.Print("C", fmt.Sprintf("%s: %s", lang("SERVERKEY"), report.ServerKeyFormat))
+		eventLog.Print("C", fmt.Sprintf("%s: %s", lang("KEYPWDSOURCE"), report.ServerKeyPasswordSource))
 		if report.ClientCAs > 0 {
-			logPrint("C", fmt.Sprintf("%s: %d", lang("CLIENTCAS"), report.ClientCAs))
+			eventLog.Print("C", fmt.Sprintf("%s: %d", lang("CLIENTCAS"), report.ClientCAs))
 		}
 		for _, warning := range report.Warnings {
-			logPrint("C", lang("CERTWARN")+warning)
+			eventLog.Print("C", lang("CERTWARN")+warning)
 		}
 		for _, bypassed := range report.Bypassed {
-			logPrint("X", lang("CERTBYPASS")+bypassed)
+			eventLog.Print("X", lang("CERTBYPASS")+bypassed)
 		}
 	}
 	if cfg.AllowInvalidServerCert {
-		logPrint("X", lang("INVALIDCERTWARN"))
+		eventLog.Print("X", lang("INVALIDCERTWARN"))
 	}
 }
 
@@ -223,19 +226,4 @@ func modeLabel(mode SecurityMode) string {
 	default:
 		return string(mode)
 	}
-}
-
-func closeLogFiles() {
-	if logFileE && logFileF != nil {
-		_ = logFileF.Close()
-	}
-	if logDataE && logDataF != nil {
-		_ = logDataF.Close()
-	}
-	if logStatusE && logStatusF != nil {
-		_ = logStatusF.Close()
-	}
-	logFileE = false
-	logDataE = false
-	logStatusE = false
 }

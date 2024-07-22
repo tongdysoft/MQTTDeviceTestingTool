@@ -25,6 +25,14 @@ func TestParseConfigDefaults(t *testing.T) {
 	if cfg.TLSMinVersion != defaultTLSMin || cfg.TLSMaxVersion != defaultTLSMax {
 		t.Errorf("TLS range = %s-%s, want %s-%s", cfg.TLSMinVersion, cfg.TLSMaxVersion, defaultTLSMin, defaultTLSMax)
 	}
+	if cfg.HandshakeTimeout != defaultHandshakeTimeout || cfg.ConnectTimeout != defaultConnectTimeout ||
+		cfg.ShutdownTimeout != defaultShutdownTimeout || cfg.MaxConcurrentHandshakes != defaultMaxConcurrentHandshakes {
+		t.Errorf("lifecycle defaults = %s/%s/%s/%d", cfg.HandshakeTimeout, cfg.ConnectTimeout,
+			cfg.ShutdownTimeout, cfg.MaxConcurrentHandshakes)
+	}
+	if cfg.DebugHTTPListen != "" {
+		t.Errorf("DebugHTTPListen = %q, want empty (disabled by default)", cfg.DebugHTTPListen)
+	}
 }
 
 func TestParseConfigRejectsTLSMaterialInPlainMode(t *testing.T) {
@@ -99,6 +107,95 @@ func TestValidateModeRequirements(t *testing.T) {
 				t.Errorf("error = %q, want substring %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestParseConfigLifecycleAndRecordFilterFlags(t *testing.T) {
+	cfg, err := ParseConfig([]string{
+		"-record-only-client-id", "a, b",
+		"-record-only-topic", "devices/#",
+		"-record-only-payload", "alarm, fault",
+		"-handshake-timeout", "2s",
+		"-connect-timeout", "3s",
+		"-shutdown-timeout", "4s",
+		"-max-handshakes", "7",
+		"-pprof-listen", "127.0.0.1:0",
+	})
+	if err != nil {
+		t.Fatalf("ParseConfig() error = %v", err)
+	}
+	if got := cfg.RecordOnlyClientIDs; len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("RecordOnlyClientIDs = %#v", got)
+	}
+	if len(cfg.RecordOnlyTopics) != 1 || len(cfg.RecordOnlyPayloads) != 2 {
+		t.Fatalf("record filters not parsed: %#v", cfg)
+	}
+	if cfg.HandshakeTimeout != 2*time.Second || cfg.ConnectTimeout != 3*time.Second ||
+		cfg.ShutdownTimeout != 4*time.Second || cfg.MaxConcurrentHandshakes != 7 {
+		t.Fatalf("lifecycle settings not parsed: %#v", cfg)
+	}
+	if cfg.DebugHTTPListen != "127.0.0.1:0" {
+		t.Fatalf("DebugHTTPListen = %q", cfg.DebugHTTPListen)
+	}
+}
+
+func TestParseConfigRejectsLegacyOnlyFlags(t *testing.T) {
+	for _, flagName := range []string{"-only-client-id", "-only-topic", "-only-payload"} {
+		if _, err := ParseConfig([]string{flagName, "x"}); err == nil {
+			t.Fatalf("ParseConfig accepted removed flag %s", flagName)
+		}
+	}
+}
+
+func TestParseConfigRejectsInvalidLifecycleValues(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-handshake-timeout", "0s"}, "-handshake-timeout"},
+		{[]string{"-connect-timeout", "-1s"}, "-connect-timeout"},
+		{[]string{"-shutdown-timeout", "0s"}, "-shutdown-timeout"},
+		{[]string{"-max-handshakes", "0"}, "-max-handshakes"},
+		{[]string{"-max-handshakes", "4097"}, "-max-handshakes"},
+		{[]string{"-pprof-listen", "not-an-address"}, "-pprof-listen"},
+	}
+	for _, test := range tests {
+		if _, err := ParseConfig(test.args); err == nil || !strings.Contains(err.Error(), test.want) {
+			t.Fatalf("ParseConfig(%v) error = %v, want substring %q", test.args, err, test.want)
+		}
+	}
+}
+
+func TestValidateRejectsDuplicateLogPaths(t *testing.T) {
+	cfg := &Config{Mode: ModePlain, LogFile: "same.log", LogDataFile: "same.log"}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "distinct paths") {
+		t.Fatalf("Validate() error = %v, want duplicate log path error", err)
+	}
+}
+
+func TestRecordFilterMatches(t *testing.T) {
+	filter := (&Config{
+		RecordOnlyClientIDs: []string{"device-1"},
+		RecordOnlyTopics:    []string{"devices/1/state"},
+		RecordOnlyPayloads:  []string{"alarm"},
+	}).NewRecordFilter()
+	if filter.Empty() {
+		t.Fatal("filter with conditions reported as empty")
+	}
+	if !filter.Matches("device-1", "devices/1/state", []byte("temperature alarm")) {
+		t.Fatal("matching message was rejected")
+	}
+	if filter.Matches("device-2", "devices/1/state", []byte("temperature alarm")) {
+		t.Fatal("client ID filter did not apply")
+	}
+	if filter.Matches("device-1", "devices/2/state", []byte("temperature alarm")) {
+		t.Fatal("topic filter did not apply")
+	}
+	if filter.Matches("device-1", "devices/1/state", []byte("normal")) {
+		t.Fatal("payload filter did not apply")
+	}
+	if !(&Config{}).NewRecordFilter().Matches("any", "any/topic", nil) {
+		t.Fatal("empty filter must match everything")
 	}
 }
 

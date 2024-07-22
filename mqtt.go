@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/packets"
@@ -12,6 +11,10 @@ import (
 type MQTTHookOptions struct {
 	Server      *mqtt.Server
 	Diagnostics *Diagnostics
+	// EventLog 为空时不写 CSV 与文本日志，诊断事件仍会记录。
+	EventLog *EventLog
+	// Filter 只决定消息内容是否记录，不阻止连接、订阅或发布。
+	Filter RecordFilter
 }
 type MQTTHook struct {
 	mqtt.HookBase
@@ -62,17 +65,21 @@ func (h *MQTTHook) OnConnect(cl *mqtt.Client, pk packets.Packet) error {
 	if len(pk.Connect.Password) > 0 {
 		h.config.Diagnostics.AddSecret(string(pk.Connect.Password))
 	}
+	// CONNECT 已经完整读取，后续由 MQTT keepalive 接管读超时。
+	if conn, ok := cl.Net.Conn.(interface{ ClearInitialDeadline() }); ok {
+		conn.ClearInitialDeadline()
+	}
 	clientID := cl.ID
 	username := string(cl.Properties.Username)
 	h.config.Diagnostics.MQTTConnectReceived(connID(cl), clientID, username, cl.Properties.ProtocolVersion, cl.Properties.Clean)
-	logFileStr(true, strCL(cl), lang("CONNECT"), "CONNECT received (authentication pending)")
+	h.config.EventLog.Status(strCL(cl), lang("CONNECT"), "CONNECT received (authentication pending)")
 	return nil
 }
 
 // 设备断开连接
 func (h *MQTTHook) OnDisconnect(cl *mqtt.Client, err error, expire bool) {
 	h.config.Diagnostics.MQTTDisconnected(connID(cl), cl.ID, err, expire)
-	logFileStr(true, strCL(cl), lang("DISCONNECT"), h.config.Diagnostics.SanitizeError(err))
+	h.config.EventLog.Status(strCL(cl), lang("DISCONNECT"), h.config.Diagnostics.SanitizeError(err))
 }
 
 // 收到订阅请求
@@ -95,7 +102,7 @@ func (h *MQTTHook) OnSubscribed(cl *mqtt.Client, pk packets.Packet, reasonCodes 
 		})
 	}
 	h.config.Diagnostics.Subscribed(connID(cl), cl.ID, outcomes)
-	logFileStr(true, strCL(cl), lang("SUBSCRIBED"), fmt.Sprintf("%s (QOS%d)", pkFilters(pk.Filters), pk.FixedHeader.Qos))
+	h.config.EventLog.Status(strCL(cl), lang("SUBSCRIBED"), fmt.Sprintf("%s (QOS%d)", pkFilters(pk.Filters), pk.FixedHeader.Qos))
 }
 
 // 收到取消订阅请求
@@ -105,44 +112,25 @@ func (h *MQTTHook) OnUnsubscribed(cl *mqtt.Client, pk packets.Packet) {
 		filters = append(filters, string(filter.Filter))
 	}
 	h.config.Diagnostics.Unsubscribed(connID(cl), cl.ID, filters)
-	logFileStr(true, strCL(cl), lang("UNSUBSCRIBED"), pkFilters(pk.Filters))
+	h.config.EventLog.Status(strCL(cl), lang("UNSUBSCRIBED"), pkFilters(pk.Filters))
 }
 
 // 客户端发送消息时
 func (h *MQTTHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, error) {
-	var clID *string = &cl.ID
-	var topic *string = &pk.TopicName
-	var payload string = string(pk.Payload)
-	// only-* 过滤只影响负载记录，不影响诊断事件与汇总计数。
-	dataAllowed := true
-	if onlyIdE && !in(&onlyIdS, clID) {
-		dataAllowed = false
-	}
-	if onlyTopicE && !in(&onlyTopicS, topic) {
-		dataAllowed = false
-	}
-	if onlyPayloadE {
-		inWord := false
-		for _, word := range onlyPayloadS {
-			if strings.Contains(payload, word) {
-				inWord = true
-				break
-			}
-		}
-		if !inWord {
-			dataAllowed = false
-		}
-	}
+	topic := pk.TopicName
+	payload := string(pk.Payload)
+	// record-only-* 只影响消息内容记录，不影响诊断计数、订阅或消息投递。
+	dataAllowed := h.config.Filter.Matches(cl.ID, topic, pk.Payload)
 	var eventPayload []byte
 	if dataAllowed {
-		if logDataE {
-			logFileStr(false, strCL(cl), *topic, payload)
+		if rec := h.config.EventLog; rec != nil {
+			rec.Data(strCL(cl), topic, payload)
 		}
 		if h.config.Diagnostics.logPayloadEnabled() {
 			eventPayload = pk.Payload
 		}
 	}
-	h.config.Diagnostics.Publish(connID(cl), cl.ID, *topic, pk.FixedHeader.Qos, pk.FixedHeader.Retain, eventPayload)
+	h.config.Diagnostics.Publish(connID(cl), cl.ID, topic, pk.FixedHeader.Qos, pk.FixedHeader.Retain, eventPayload)
 	return pk, nil
 }
 
