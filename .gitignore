@@ -18,6 +18,8 @@ mqtt-test-server
 /certs/
 /test-certs/
 *.partial-*/
+# 诊断结果（可能含客户端标识与负载）
+/results/
 auth.json
 macOS/mqttdevicetestingtool/MQTTDeviceTestingTool_*
 A*.md

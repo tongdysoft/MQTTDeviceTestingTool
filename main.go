@@ -46,6 +46,13 @@ func run() int {
 		}
 	}
 
+	if cfg.ShowHelp {
+		fmt.Printf("%s v%s for %s\n\n", lang("TITLE"), version, runtime.GOOS)
+		fmt.Print(cfg.HelpText)
+		fmt.Printf("\n%s https://github.com/tongdysoft/MQTTDeviceTestingTool\n", lang("HELP"))
+		return 0
+	}
+
 	if cfg.ShowVersion {
 		fmt.Printf("%s v%s for %s (KagurazakaYashi@Tongdy, 2024)\n", lang("TITLE"), version, runtime.GOOS)
 		fmt.Printf("%s https://github.com/tongdysoft/MQTTDeviceTestingTool\n", lang("HELP"))

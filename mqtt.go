@@ -107,6 +107,12 @@ func (h *MQTTHook) OnSubscribed(cl *mqtt.Client, pk packets.Packet, reasonCodes 
 
 // 收到取消订阅请求
 func (h *MQTTHook) OnUnsubscribed(cl *mqtt.Client, pk packets.Packet) {
+	// mochi 在客户端断开、会话接管等清理路径也会回调 OnUnsubscribed，
+	// 这些内部调用没有报文标识，过滤器也可能为空。协议层的 UNSUBSCRIBE
+	// 必须带非零 PacketID，因此只记录真正的客户端取消订阅报文。
+	if pk.PacketID == 0 || len(pk.Filters) == 0 {
+		return
+	}
 	filters := make([]string, 0, len(pk.Filters))
 	for _, filter := range pk.Filters {
 		filters = append(filters, string(filter.Filter))

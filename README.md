@@ -88,12 +88,33 @@ General options:
   - Save the text log to a file.
 - `-log-timestamp`
   - Use Unix timestamps in logged CSV files instead of the time string.
+
+CSV columns: status logs contain time, client, event and detail; data logs contain time, client, topic and payload. With `-log-timestamp` the first column is a Unix nanosecond timestamp. These files are written synchronously and are separate from `events.jsonl`/`summary.json`.
 - `-monochrome`
   - Use a monochrome color scheme (for terminals such as Windows cmd.exe).
 - `-lang auto|en|chs`
   - Display language (default `auto`).
 - `-version`
   - Print version info and exit.
+- `-h`, `-help`
+  - Print all flags with their default values and exit with code `0`.
+
+Diagnostics and result export:
+
+- `-run-id string`
+  - Run identifier written to every event and to the summary (default: generated). At most 64 characters; control characters are rejected.
+- `-device-model`, `-firmware`, `-test-case`, `-note string`
+  - Free-form metadata for the run summary. They are recorded as operator-provided context, not interpreted by the tool.
+- `-results DIR`
+  - Write `events.jsonl` and `summary.json` into `DIR`. The directory is created if missing. Startup fails instead of overwriting an existing `events.jsonl` or `summary.json`, so use a new directory for each run.
+- `-log-payload`
+  - Include MQTT application payloads in diagnostic events (default off). Payloads are truncated to 4096 bytes; non-UTF-8 data is base64 encoded. Payload recording is still subject to `-record-only-*`, and known secrets are redacted, but treat result files as sensitive.
+- `-expect-tls any|success|failure`, `-expect-connect any|accepted|rejected`, `-expect-client-cert any|present|absent`
+  - Optional expectations used for automatic per-connection judgement. `any` disables that part of the judgement. A verdict is only `pass` when every specified condition has complete observed evidence; `fail` requires contrary evidence; otherwise the result is `undetermined`. In one-way TLS mode a client-certificate expectation is always `undetermined`, because the server does not request a certificate. Expectation results do not change the process exit code.
+
+`events.jsonl` contains one JSON object per line with `seq`, RFC3339Nano `time`, `run_id`, `connection_id`, `stage`, `action`, `result`, `certainty`, and optional `remote`, `client_id`, `username`, `reason`, `reason_code`, `tls` and `context`. Stages are `run`, `transport`, `tls`, `mqtt_connect`, `mqtt_auth`, `authorization`, `subscribe`, `unsubscribe`, `publish` and `disconnect`. `certainty` distinguishes `observed` facts from `heuristic`, `uncertain` and `unknown` inferences; do not read an unobserved value as a negative result.
+
+`summary.json` contains the run metadata, effective configuration, expectations, event counts, one entry per connection with observed facts, evidence, failures/undetermined reasons, and the overall verdict. TLS certificate summaries include subject, issuer, serial, validity, SANs and SHA-256 fingerprints, never private keys. `output.status` is `complete`, `failed` or `memory_only` (no `-results`). Password values and PEM private-key blocks are redacted from events and summary text.
 
 Connection lifecycle options:
 
@@ -148,13 +169,41 @@ acl:
 
 ## Build
 
+Requirements: Go 1.22.3 or newer (the module declares `go 1.22.3`; this round was tested with Go 1.27.2). Building does not require OpenSSL, a real device or internet access after module download.
+
 ```sh
-go get .     # Need internet
-go generate  # Windows only
+go mod download   # Need internet
+go generate       # Windows only
 go build .
 ```
 
 Build all platforms under Windows: `build.bat`
+
+### Tests
+
+The default suite uses only loopback TCP/TLS, dynamically generated certificates in `t.TempDir`, and a minimal in-process MQTT client. It does not use OpenSSL, a real device, a public broker or the internet.
+
+```sh
+go vet ./...
+BUDGET=$(( $(nproc) / 2 )); [ "$BUDGET" -lt 1 ] && BUDGET=1
+GOMAXPROCS=$BUDGET go test -count=1 -p "$BUDGET" -parallel "$BUDGET" ./...
+GOMAXPROCS=$BUDGET go test -race -count=1 -p "$BUDGET" -parallel "$BUDGET" ./...
+```
+
+On Windows, replace `$(nproc)` with the number of logical processors and keep the same half-budget rule (minimum 1).
+
+The optional certificate-script integration test is enabled explicitly:
+
+```sh
+MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
+```
+
+Cross-compilation only proves that the target builds; it is not a run-time verification on Windows or macOS:
+
+```sh
+GOOS=windows GOARCH=amd64 go build .
+GOOS=darwin  GOARCH=arm64 go build .
+```
 
 ## Screenshot
 
@@ -262,12 +311,45 @@ TLS 参数：
   - 将日志输出保存到 .txt / .log 文件。
 - `-log-timestamp`
   - 在记录的 CSV 文件中使用 Unix 时间戳而不是时间字符串。
+
+CSV 列：状态日志为“时间、客户端、事件、说明”，数据日志为“时间、客户端、主题、负载”；使用 `-log-timestamp` 时首列为 Unix 纳秒时间戳。CSV/文本日志为同步写入，与 `events.jsonl`、`summary.json` 相互独立。
 - `-monochrome`
   - 使用单色模式输出，避免某些终端（例如 Windows 的 cmd.exe）显示乱码。
 - `-lang auto|en|chs`
   - 显示语言（默认 `auto`）。
 - `-version`
   - 显示版本号等信息并退出。
+- `-h`、`-help`
+  - 打印全部参数及默认值并退出，退出码为 `0`。
+
+诊断与结果导出参数：
+
+- `-run-id 字符串`
+  - 运行编号，写入每条事件与汇总（默认自动生成）。最长 64 个字符，不允许控制字符。
+- `-device-model`、`-firmware`、`-test-case`、`-note 字符串`
+  - 写入汇总的运行上下文。工具只原样记录，不解释其含义。
+- `-results 目录`
+  - 在该目录写入 `events.jsonl` 与 `summary.json`；目录不存在时会创建。目录中已存在其中任一文件时，启动直接失败而不是覆盖，因此每轮测试应使用新目录。
+- `-log-payload`
+  - 在诊断事件中包含 MQTT 应用负载（默认关闭）。负载最多保留 4096 字节，非 UTF-8 内容以 Base64 记录；仍受 `-record-only-*` 过滤，已知密码会被替换，但结果文件整体仍应按敏感材料管理。
+- `-expect-tls any|success|failure`、`-expect-connect any|accepted|rejected`、`-expect-client-cert any|present|absent`
+  - 可选的自动判定预期，`any` 表示该项不参与判定。只有全部已指定条件都取得完整观测证据时，连接判定才是 `pass`；出现相反证据为 `fail`；证据不完整为 `undetermined`。单向 TLS 模式下指定设备证书预期始终为 `undetermined`，因为服务器不会请求证书。预期判定结果**不会改变进程退出码**。
+
+结果格式：
+
+- `events.jsonl` 每行一个 JSON 对象，字段包括 `seq`、RFC3339Nano 格式的 `time`、`run_id`、`connection_id`、`stage`、`action`、`result`、`certainty`，以及可选的 `remote`、`client_id`、`username`、`reason`、`reason_code`、`tls`、`context`。
+- 阶段（`stage`）取值为 `run`、`transport`、`tls`、`mqtt_connect`、`mqtt_auth`、`authorization`、`subscribe`、`unsubscribe`、`publish`、`disconnect`。其中 `mqtt_connect` 只表示收到 CONNECT，认证结果以 `mqtt_auth` 阶段的 CONNACK 返回码为准。
+- `certainty` 区分 `observed`（直接观察）、`heuristic`（启发式判断）、`uncertain`（不确定）与 `unknown`（未观察）。不要把“未观察到”当成“设备不支持”。
+- `summary.json` 包含运行元数据、实际生效配置、预期、事件计数、每个连接的观测事实、证据、失败/未判定原因与总判定；TLS 证书摘要只含主题、签发者、序列号、有效期、SAN 与 SHA-256 指纹，不含私钥。
+- `output.status` 为 `complete`、`failed` 或 `memory_only`（未指定 `-results`）。`counts.dropped_terminal_events` 只表示终端显示队列溢出，不影响 JSONL 与内存事件；结构化写入失败会进入 `output.write_errors`。
+
+退出码：
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 正常运行结束，或 `-version` / `-h` |
+| `1` | 启动失败、监听失败、日志/结果文件写入失败、关闭超时 |
+| `2` | 参数或配置校验失败（未知模式、参数冲突、无效数值、文件不存在等） |
 
 连接生命周期参数：
 
@@ -286,7 +368,7 @@ TLS、配置、日志文件或调试监听错误会以非零退出码终止启�
 
 ### 真实设备测试证书（OpenSSL 脚本）
 
-需要给真实设备准备长期使用的测试证书时，可在已安装 bash 与 OpenSSL 1.1.1+ 的机器上运行：
+需要给真实设备准备长期使用的测试证书时，可在已安装 bash 4+ 与 OpenSSL 1.1.1+ 的机器上运行：
 
 ```sh
 bash scripts/gen-test-certs.sh -o "certs/设备测试-01" \
@@ -294,13 +376,187 @@ bash scripts/gen-test-certs.sh -o "certs/设备测试-01" \
     --device-id dev-001
 ```
 
-Windows 默认 cmd 可运行 `scripts\gen-test-certs.bat`（内部调用 MSYS2/Git Bash）；参数含中文时建议直接在 MSYS2 终端执行 `.sh`。脚本生成 CA A/CA B、服务器证书、设备导入材料，以及过期、未生效、EKU 错误、SAN 不匹配、不受信任 CA 等反例，并在生成后用 OpenSSL 复核链、用途、SAN、时间和公私钥匹配。设备目录不包含 CA 私钥或服务器私钥；输出目录已存在时不会覆盖。每项反例的唯一预期失败原因见输出目录内的 `manifest.txt` 与 `说明.txt`。
+常用选项：`--validity-days`（叶证书天数，默认 365）、`--ca-validity-days`（CA 天数，默认 3650，且至少比叶证书多 30 天）、`--key-alg`（`rsa2048`/`rsa3072`/`rsa4096`/`ec-p256`/`ec-p384`）、`--ca-key-alg`、`--leaf-key-format pkcs8|traditional`。完整说明可运行 `bash scripts/gen-test-certs.sh --help`。Windows 默认 cmd 可运行 `scripts\gen-test-certs.bat`（内部调用 MSYS2/Git Bash）；参数含中文时建议直接在 MSYS2 终端执行 `.sh`。
 
-该脚本只用于人工测试材料，基础 `go test` 不依赖它。可选的脚本集成测试需显式启用：
+输出结构：
+
+```text
+<输出目录>/
+  ca/ca-a/             CA A 私钥、证书与审计文件（不得导入设备或分发）
+  ca/ca-b/             CA B 私钥、证书（用于不受信任签发者反例）
+  server/              server.crt、server.key、ca-a.crt（设备信任锚）
+  server/negative/     过期、SAN/CN 不匹配、CA B 签发的服务器证书反例
+  device/              device.crt、device.key、ca-a.crt（设备导入材料）
+  device/negative/     过期、未生效、EKU 错误、CA B 签发的设备证书反例
+  manifest.txt         路径与 SHA-256 指纹清单（不含私钥）
+  说明.txt             中文说明与每项反例的唯一预期失败原因
+```
+
+脚本在生成后用 OpenSSL 复核链、用途、SAN、时间与公私钥匹配，并保证设备目录不含 CA 私钥或服务器私钥。私钥权限为 `0600`，输出目录已存在时脚本直接失败、不覆盖任何材料。生成物默认被 `.gitignore` 中的 `/certs/`、`/test-certs/` 排除。
+
+用生成的材料启动本工具：
+
+```sh
+# 单向 TLS：设备只需信任 server/ca-a.crt
+./MQTTDeviceTestingTool -mode tls -listen 0.0.0.0:8883 \
+    -server-cert "certs/设备测试-01/server/server.crt" \
+    -server-key  "certs/设备测试-01/server/server.key"
+
+# 强制 mTLS：服务器用 server/ca-a.crt 验证设备证书
+./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
+    -server-cert "certs/设备测试-01/server/server.crt" \
+    -server-key  "certs/设备测试-01/server/server.key" \
+    -client-ca   "certs/设备测试-01/server/ca-a.crt"
+```
+
+脚本只用于人工测试材料，基础 `go test` 不依赖它。可选的脚本集成测试需显式启用（需要 bash 与 OpenSSL；未安装相关工具时会明确 Skip）：
 
 ```sh
 MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
 ```
+
+### 真实设备手工测试流程
+
+以下流程中的“通过”仅代表本次实际观察到的配置、算法与固件组合，不代表设备支持所有客户 PKI、所有证书格式或身份绑定要求。设备“单一证书”与“三元组证书”的字段含义和拼接顺序仍未确认，必须先按设备文档核对，不能根据本工具猜测。
+
+#### 0. 先验证测试环境
+
+1. 用已知支持 mTLS 的软件客户端连接本工具，排除服务端材料、端口、防火墙与主机名问题。示例（需自行安装 OpenSSL 客户端工具）：
+
+   ```sh
+   openssl s_client -connect mqtt.example.com:8883 -servername mqtt.example.com \
+       -CAfile "certs/设备测试-01/device/ca-a.crt" \
+       -cert "certs/设备测试-01/device/device.crt" \
+       -key  "certs/设备测试-01/device/device.key"
+   ```
+
+   没有 `-cert`/`-key` 时应被拒绝；带正确材料时握手应成功。需要验证 MQTT 层时，可使用 `mosquitto_pub`/`mosquitto_sub` 等客户端，加上 `--cafile`、`--cert`、`--key`，不要使用跳过服务器校验的选项。
+
+2. 记录工具版本（`./MQTTDeviceTestingTool -version`）、实际模式、监听地址、TLS 版本范围与设备证书策略。启动摘要显示的是实际生效值，不是命令行输入。
+
+3. 每次切换证书、CA 或模式后重新启动工具，并在设备侧重新建立连接。设备的 TLS 会话缓存、MQTT 会话恢复和连接复用可能让“移除证书”的反例错误地继续使用旧会话；测试时应使用新的 Client ID、Clean Session/Start，必要时重启工具或设备。
+
+#### 1. 单向 TLS 基线
+
+- 工具使用 `-mode tls` 与正向 `server/server.crt`、`server/server.key`。
+- 设备导入 `device/ca-a.crt` 作为服务器信任锚，服务器地址必须匹配证书 SAN（DNS 或 IP）。
+- 预期：设备验证服务器成功，MQTT 连接按 `-users` 配置被接受。
+
+#### 2. 强制 mTLS：无证书必须被拒绝
+
+- 工具使用 `-mode mtls` 与 `-client-ca server/ca-a.crt`。
+- 设备清除客户端证书（或使用不含证书的配置）后重新连接。
+- 预期：TLS 握手失败，工具记录 `tls/handshake/failure`，原因通常是 `client_certificate_missing`（启发式）或设备收到的 `certificate_required` alert；不应出现成功的 CONNACK。若设备仍显示连接成功，优先检查会话恢复、代理终止 TLS 或设备实际仍在发送旧证书。
+
+#### 3. 强制 mTLS：正确三元组成功
+
+- 设备导入 `device/device.crt`、`device/device.key` 与 `device/ca-a.crt`。
+- 工具保持 `-client-ca server/ca-a.crt`。
+- 预期：TLS 握手成功，`client_certificate=present`，MQTT CONNACK 为接受。用 `-results` 与 `-expect-*` 可让工具自动判定，例如：
+
+  ```sh
+  ./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
+      -server-cert "certs/设备测试-01/server/server.crt" \
+      -server-key  "certs/设备测试-01/server/server.key" \
+      -client-ca   "certs/设备测试-01/server/ca-a.crt" \
+      -results "results/mtls-valid" -run-id mtls-valid \
+      -expect-tls success -expect-connect accepted -expect-client-cert present
+  ```
+
+#### 4. 强制 mTLS：不受信任或无效的设备证书必须被拒绝
+
+分别替换设备证书/私钥后重新连接，其他条件保持一致：
+
+- `device/negative/device-by-ca-b.crt`：签发者不在 `-client-ca` 中。
+- `device/negative/device-expired.crt`：已过期。
+- `device/negative/device-notyet.crt`：尚未生效。
+- `device/negative/device-wrong-eku.crt`：缺少 `clientAuth` 用途。
+
+预期均为 TLS 握手失败（`certificate_verification`、alert 或对端关闭），且没有 MQTT 认证成功。若设备无法导入无效证书，应记录为“设备导入失败”，不要记作“服务器拒绝了该证书”。
+
+#### 5. 设备拒绝无效服务器证书
+
+保持设备信任 `device/ca-a.crt`，分别让工具使用以下服务器材料：
+
+- `server/negative/server-by-ca-b.crt`：设备不受信任的签发者。
+- `server/negative/server-wrong-host.crt`：名称与设备连接地址不匹配。
+- `server/negative/server-expired.crt`：已过期；启动工具时需显式加 `-allow-invalid-server-cert` 才会放行服务器自身的语义检查。
+
+预期：设备在 TLS 握手阶段拒绝，工具侧通常看到失败或对端关闭，且没有 CONNECT/CONNACK。`-allow-invalid-server-cert` 只放行服务器证书语义检查，不会让设备信任该证书，也不会放宽设备证书验证。
+
+#### 6. 材料角色映射与待核对项
+
+| 标准角色 | 脚本材料 | 使用方 |
+| --- | --- | --- |
+| 服务器证书链 | `server/server.crt` | 工具 `-server-cert` |
+| 服务器私钥 | `server/server.key` | 工具 `-server-key` |
+| 验证设备证书的信任锚 | `server/ca-a.crt` | 工具 `-client-ca` |
+| 设备证书 | `device/device.crt` | 设备 |
+| 设备私钥 | `device/device.key` | 设备 |
+| 设备验证服务器的信任锚 | `device/ca-a.crt` | 设备 |
+| 不受信任的对照 CA | `device/negative/ca-b.crt` | 对照实验 |
+
+真实设备若要求“单一证书”或“三元组证书”，需向设备文档或厂商确认：设备证书是否必须包含中间证书、各字段的顺序与分隔方式、私钥格式（PKCS#1/SEC1/PKCS#8、是否加密）、CA 是否与设备证书放在同一文件，以及设备支持的密钥算法。确认前不要把多个 PEM 文件拼接后直接导入。
+
+#### 7. 结果记录模板
+
+```text
+测试日期：
+测试人员：
+设备型号：
+固件版本：
+工具版本（-version）：
+运行编号（-run-id）：
+测试模式（plain/tls/mtls）：
+监听地址与端口：
+TLS 版本范围：
+服务器证书主题 / SHA-256：
+设备证书主题 / SHA-256：
+设备信任锚 / SHA-256：
+设备 CA（工具 -client-ca）/ SHA-256：
+其他条件（用户名、Client ID、Clean Session、网络、代理、设备时钟）：
+
+预期：
+实际结果（阶段 / 结果 / 原因或 alert / CONNACK 返回码）：
+判定（通过 / 失败 / 未判定）：
+日志与结果位置（-log、-results 目录）：
+备注与后续动作：
+```
+
+失败按阶段区分：
+
+- **导入失败**：设备拒绝证书/私钥格式、字段缺失或文件过大，连接尚未建立。
+- **握手失败**：TCP 已建立，但 TLS 在证书验证、算法、协议版本或客户端证书要求处失败。
+- **MQTT 层失败**：TLS 成功，但 CONNACK 拒绝、订阅被拒或发布未授权；这类结果不能解释为 TLS 失败。
+
+
+### 错误排查
+
+先看启动摘要确认实际模式、TLS 版本范围和设备证书策略，再看 `events.jsonl` 的阶段与 `certainty`，不要只根据终端最后一行判断。
+
+| 现象 | 优先检查 |
+| --- | --- |
+| 启动退出码 `2` | 参数冲突、未知模式、TLS 版本、数值范围、文件不存在；错误写在 stderr |
+| 启动退出码 `1` | 证书/私钥读取或解析、私钥密码、私钥不配对、链结构、监听端口或结果目录 |
+| `tls/handshake/failure` + `certificate_verification` | 设备证书签发者是否在 `-client-ca`、是否过期/未生效、是否含 `clientAuth`、中间证书是否完整 |
+| `client_certificate_missing`（`heuristic`） | 设备是否真的发送证书；同时排除 TLS 会话恢复、代理终止 TLS 与旧连接复用 |
+| `tls_record` / `not_tls_record` | 客户端把明文发到 TLS 端口、端口错误或代理改写了流量 |
+| `timeout` | `-handshake-timeout`、`-connect-timeout`、网络中断或设备未发送 CONNECT；超时不等于证书错误 |
+| `peer_closed` | 对端主动关闭；只能说明连接结束，不能据此断定具体证书原因 |
+| TLS 成功但 `mqtt_auth/rejected` | 认证由 `-users` 的 `auth` 决定，与 `-record-only-*` 无关；查看 CONNACK 返回码 |
+| 订阅或发布被拒 | 检查 `-users` 的 `acl`；`-record-only-*` 只控制记录，不控制权限 |
+| 设备拒绝服务器证书 | 检查 SAN/连接主机名、设备信任锚、有效期、设备时钟、TLS 版本与算法能力 |
+| `output.status=failed` | 结果文件写入失败；查看 `summary.json` 的 `output.write_errors` 与 stderr |
+
+`-allow-invalid-server-cert` 只放行服务器证书的有效期、EKU、KeyUsage、CA-as-leaf 等语义检查；它不会放行损坏材料、私钥不匹配或链错误，也不会影响设备证书验证。OpenSSL 脚本要求 bash 4+ 与 OpenSSL 1.1.1+，明确拒绝 LibreSSL；Windows 下路径或中文参数问题请改用 MSYS2 终端执行 `.sh`。
+
+### 敏感材料处理
+
+- CA 私钥与服务器私钥只保留在受控目录，权限分别为 `0700`/`0600`；设备的“三元组”或“单一证书”导入包中不应包含 CA 私钥，除非设备文档明确要求。
+- 私钥密码优先使用权限 `0600` 的密码文件或环境变量；命令行不提供明文密码参数，密码不会写入日志、事件或汇总。
+- `-results` 与 `-log*` 可能包含 Client ID、用户名、主题；启用 `-log-payload` 后还会包含应用负载。结果文件默认权限为 `0644`、结果目录为 `0755`，如需更严格请放在受限目录或运行后调整权限，并排除在版本管理之外（仓库已忽略 `/certs/`、`/test-certs/`、`/results/`、`*.log`、`*.csv`；也可使用仓库外路径）。
+- 测试材料不应导入生产信任库；测试完成后按组织要求删除或轮换，不要提交私钥、密码或真实设备日志。
+- 工具不修改系统信任库、防火墙或真实设备配置；这些操作需由用户另行执行。
 
 ### 用户和主题权限配置文件示例
 
@@ -340,10 +596,38 @@ acl:
 
 ## 编译
 
+运行环境：Go 1.22.3 或更高版本（模块声明 `go 1.22.3`，本轮在 Go 1.27.2 上验证）。首次下载模块需要互联网；编译本身不依赖 OpenSSL、真实设备或公共 MQTT 服务。
+
 ```sh
-go get .     # 需要有互联网连接
-go generate  # 只有 Windows 需要执行这条
+go mod download   # 需要网络
+go generate       # 只有 Windows 需要执行这条
 go build .
+```
+
+### 测试
+
+基础测试只使用回环 TCP/TLS、`t.TempDir` 中的动态证书和进程内的最小 MQTT 客户端，不依赖 OpenSSL、真实设备、公共 MQTT 服务或互联网。并发预算不超过逻辑处理器数的一半（向下取整，最少 1）：
+
+```sh
+go vet ./...
+BUDGET=$(( $(nproc) / 2 )); [ "$BUDGET" -lt 1 ] && BUDGET=1
+GOMAXPROCS=$BUDGET go test -count=1 -p "$BUDGET" -parallel "$BUDGET" ./...
+GOMAXPROCS=$BUDGET go test -race -count=1 -p "$BUDGET" -parallel "$BUDGET" ./...
+```
+
+Windows 下没有 `nproc` 时，请按逻辑处理器数量手动设置同样的“一半、最少 1”预算。
+
+可选证书脚本集成测试（需要 bash 与 OpenSSL 1.1.1+；缺少时明确 Skip）：
+
+```sh
+MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
+```
+
+交叉编译只证明目标平台能编译，不代表已在目标平台运行：
+
+```sh
+GOOS=windows GOARCH=amd64 go build .
+GOOS=darwin  GOARCH=arm64 go build .
 ```
 
 ### 跨平台编译

@@ -35,6 +35,23 @@ func TestParseConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestParseConfigHelp(t *testing.T) {
+	for _, args := range [][]string{{"-h"}, {"-help"}, {"--help"}, {"-h", "-lang", "chs"}} {
+		cfg, err := ParseConfig(args)
+		if err != nil {
+			t.Fatalf("ParseConfig(%v) error = %v", args, err)
+		}
+		if cfg == nil || !cfg.ShowHelp {
+			t.Fatalf("ParseConfig(%v) did not request help", args)
+		}
+		for _, want := range []string{"-mode", "-server-cert", "-client-ca", "-results", "-expect-tls"} {
+			if !strings.Contains(cfg.HelpText, want) {
+				t.Errorf("help text for %v is missing %q", args, want)
+			}
+		}
+	}
+}
+
 func TestParseConfigRejectsTLSMaterialInPlainMode(t *testing.T) {
 	tests := []struct {
 		name string

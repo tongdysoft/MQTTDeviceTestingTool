@@ -71,6 +71,38 @@ func TestIntegrationPlainMQTTBaseline(t *testing.T) {
 	mustRoundTrip(t, client, "devices/plain/state", "plain-message")
 }
 
+func TestIntegrationDisconnectCleanupDoesNotLogUnsubscribe(t *testing.T) {
+	tests := []struct {
+		name      string
+		subscribe bool
+	}{
+		{"no_subscriptions", false},
+		{"with_subscription", true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server, addr := startTestServer(t, testServerSpec{Mode: ModePlain})
+			client := requireConnect(t, addr, mqttClientOptions{})
+			if test.subscribe {
+				if granted, err := client.Subscribe("devices/disconnect/state", 1); err != nil || granted == 0x80 {
+					t.Fatalf("subscribe: granted=%d err=%v", granted, err)
+				}
+			}
+			if err := client.Close(); err != nil {
+				t.Fatalf("close client: %v", err)
+			}
+			waitForEvent(t, server.Diagnostics(), 2*time.Second, func(event Event) bool {
+				return event.Stage == StageTransport && event.Action == "close"
+			})
+			for _, event := range server.Diagnostics().Events() {
+				if event.Stage == StageUnsubscribe {
+					t.Fatalf("客户端断开清理不应产生取消订阅事件：%+v", event)
+				}
+			}
+		})
+	}
+}
+
 func TestIntegrationTLSWithoutClientCertificate(t *testing.T) {
 	notBefore, notAfter := validServerWindow()
 	serverCA := newTestCA(t, "Integration Server CA", notBefore, notAfter)

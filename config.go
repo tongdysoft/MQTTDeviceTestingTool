@@ -1,10 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"strconv"
@@ -73,6 +74,8 @@ type Config struct {
 	FileTimestamp bool
 	Monochrome    bool
 	ShowVersion   bool
+	ShowHelp      bool
+	HelpText      string
 	Language      string
 
 	// 诊断与结果导出。
@@ -105,7 +108,10 @@ func ParseConfig(args []string) (*Config, error) {
 	}
 
 	fs := flag.NewFlagSet("mqtt-test-server", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	// 帮助输出写入缓冲区，由启动入口按显示语言打印；其他解析错误
+	// 仍由 ParseConfig 返回，避免标准库再输出一份重复的用法说明。
+	var helpText bytes.Buffer
+	fs.SetOutput(&helpText)
 	var (
 		mode            string
 		recordClientIDs string
@@ -149,6 +155,11 @@ func ParseConfig(args []string) (*Config, error) {
 	fs.StringVar(&cfg.ExpectClientCert, "expect-client-cert", expectationAny, "Expected verified device certificate: any, present, absent")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			cfg.ShowHelp = true
+			cfg.HelpText = helpText.String()
+			return cfg, nil
+		}
 		return nil, fmt.Errorf("invalid arguments: %w", err)
 	}
 	if fs.NArg() > 0 {
