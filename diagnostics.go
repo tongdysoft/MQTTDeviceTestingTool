@@ -280,6 +280,9 @@ type DiagnosticsOptions struct {
 	Terminal     io.Writer
 	ErrorWriter  io.Writer
 	Now          func() time.Time
+	// Protected 列出不得被结果文件覆盖的输入路径角色。
+	// 为空且提供了 Config 时，使用 Config 中的输入、日志与结果路径。
+	Protected []FileRole
 }
 
 // Diagnostics 是并发安全的事件记录与结果导出器。
@@ -404,6 +407,17 @@ func NewDiagnostics(opts DiagnosticsOptions) (*Diagnostics, error) {
 		expectations.ClientCertificate = expectationAny
 	}
 	if err := validateExpectations(expectations); err != nil {
+		return nil, err
+	}
+
+	// 结果目录下的 events.jsonl 与 summary.json 也是输出目标，必须在创建目录、
+	// 创建事件文件之前与输入材料和日志文件区分开。
+	conflictRoles := append([]FileRole{}, opts.Protected...)
+	if opts.Config != nil {
+		conflictRoles = append(conflictRoles, opts.Config.FileRoles()...)
+	}
+	conflictRoles = append(conflictRoles, resultsFileRoles(opts.ResultsDir)...)
+	if err := CheckFileRoleConflicts(conflictRoles); err != nil {
 		return nil, err
 	}
 

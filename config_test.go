@@ -185,8 +185,8 @@ func TestParseConfigRejectsInvalidLifecycleValues(t *testing.T) {
 
 func TestValidateRejectsDuplicateLogPaths(t *testing.T) {
 	cfg := &Config{Mode: ModePlain, LogFile: "same.log", LogDataFile: "same.log"}
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "distinct paths") {
-		t.Fatalf("Validate() error = %v, want duplicate log path error", err)
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "file path conflict") {
+		t.Fatalf("Validate() error = %v, want duplicate log path conflict", err)
 	}
 }
 

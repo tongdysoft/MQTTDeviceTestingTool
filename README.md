@@ -45,6 +45,8 @@ Security modes:
 - `tls`: one-way TLS. Requires `-server-cert` and `-server-key`; the server does not request a device certificate.
 - `mtls`: mutual TLS. Requires `-server-cert`, `-server-key` and `-client-ca`, and always uses `tls.RequireAndVerifyClientCert`.
 
+Common procedures for device connectivity, one-way TLS, mTLS support and server-certificate validation are in [Common procedures (best practices)](#common-procedures-best-practices) below.
+
 TLS options:
 
 - `-server-cert path-string`
@@ -209,6 +211,164 @@ GOOS=darwin  GOARCH=arm64 go build .
 
 ![Screenshot](screenshot-en.png)
 
+## Common procedures (best practices)
+
+The steps below go from plain connectivity to one-way TLS, mTLS and server-certificate validation. Change one condition per step. After switching certificates, modes or negative cases, restart the device with a new Client ID and Clean Session/Start so session resumption cannot hide the result. Use a new `-results` directory for each run; the tool refuses to overwrite existing files.
+
+### 0. Generate materials
+
+```sh
+bash scripts/gen-test-certs.sh -o certs/mtls-check \
+    --san-dns "mqtt.example.com,localhost" \
+    --san-ip "192.168.1.10,127.0.0.1" \
+    --device-id dev-001
+```
+
+Set the SAN values to the exact hostname/IP the device connects to. Material roles:
+
+| Role | Files | Used by |
+| --- | --- | --- |
+| Server certificate chain / key | `server/server.crt`, `server/server.key` | Tool `-server-cert` / `-server-key` |
+| Trust anchor for device certificates | `server/ca-a.crt` | Tool `-client-ca` |
+| Device certificate / key | `device/device.crt`, `device/device.key` | Device |
+| Server trust anchor for the device | `device/ca-a.crt` | Device |
+| Negative device certificates | `device/negative/` | Device |
+| Negative server certificates | `server/negative/` | Tool |
+
+For a device that only accepts traditional key files, add `--leaf-key-format traditional`; to match a device's key capability, use `--key-alg ec-p256`, `rsa2048`, etc. The script writes separate PEM files. Do not concatenate them into a "single certificate" or "triple" package until the vendor documents the field order, separators and encoding. Never import a CA private key into the device.
+
+### 1. Verify the server without the device
+
+```sh
+./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
+    -server-cert certs/mtls-check/server/server.crt \
+    -server-key  certs/mtls-check/server/server.key \
+    -client-ca   certs/mtls-check/server/ca-a.crt
+```
+
+On another terminal or machine:
+
+```sh
+# Expected: handshake failure (no client certificate)
+openssl s_client -connect 127.0.0.1:8883 -servername localhost \
+    -CAfile certs/mtls-check/device/ca-a.crt </dev/null
+
+# Expected: Verify return code: 0 (ok)
+openssl s_client -connect 127.0.0.1:8883 -servername localhost \
+    -CAfile certs/mtls-check/device/ca-a.crt \
+    -cert certs/mtls-check/device/device.crt \
+    -key  certs/mtls-check/device/device.key </dev/null
+```
+
+Use a `-servername` and destination address covered by the certificate SAN. If the SAN does not include them, regenerate the materials or connect to a covered address. Stop this server before the device runs.
+
+### 2. Test whether the device can connect (plain MQTT)
+
+```sh
+./MQTTDeviceTestingTool -mode plain -listen 0.0.0.0:1883 \
+    -results results/00-plain -run-id device-plain \
+    -device-model "YOUR-MODEL" -firmware "YOUR-FIRMWARE" \
+    -test-case plain-baseline \
+    -expect-connect accepted
+```
+
+On the device: disable TLS and connect to TCP 1883 on the test machine. If `-users` is used, enter the configured username and password. The tool does not change firewall rules.
+
+Expected: `mqtt_auth=accepted` in `summary.json`. Without `-users`, all connections are allowed by default; if the connection is rejected, check the `auth` section of `-users` first. If the device is TLS-only, this step is expected to fail and you can proceed to step 3. Otherwise, fix networking, port, firewall, Client ID and MQTT authentication first.
+
+### 3. Test whether the device can complete one-way TLS
+
+```sh
+./MQTTDeviceTestingTool -mode tls -listen 0.0.0.0:8883 \
+    -server-cert certs/mtls-check/server/server.crt \
+    -server-key  certs/mtls-check/server/server.key \
+    -results results/01-tls -run-id device-tls-baseline \
+    -device-model "YOUR-MODEL" -firmware "YOUR-FIRMWARE" \
+    -test-case tls-baseline \
+    -expect-tls success -expect-connect accepted
+```
+
+On the device, import `device/ca-a.crt` as the server trust anchor (or the CA that signed the server certificate), connect to an address covered by the certificate SAN, and do not configure a client certificate for this run. Make sure the device can reach the test machine on TCP 8883; the tool does not change firewall rules. Use a new `-results` directory and a new `-run-id` for every repeated run; the tool refuses to overwrite existing result files.
+
+Expected: the device connects; `summary.json` shows `tls=success`, `mqtt_auth=accepted` and `client_certificate=absent` (the server did not ask for one). MQTT authentication is controlled by `-users`; without it, the default policy allows all connections. If this fails, fix the trust anchor, SAN, TLS version, device clock, port and firewall first; a failure here does not yet say anything about mTLS. Do not add `-expect-client-cert` in this mode: the tool correctly reports it as `undetermined`, because one-way TLS never asks for a device certificate.
+
+### 4. Test whether the device supports mTLS
+
+A one-way TLS server never requests a device certificate, so a device with a certificate and one without behave identically. Determining mTLS support requires two `-mode mtls` connections.
+
+#### 4.1 Device without a client certificate
+
+Start the strict mTLS server, keeping the device configuration from the baseline (no client certificate):
+
+```sh
+./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
+    -server-cert certs/mtls-check/server/server.crt \
+    -server-key  certs/mtls-check/server/server.key \
+    -client-ca   certs/mtls-check/server/ca-a.crt \
+    -results results/02-mtls-no-device-cert -run-id device-mtls-no-cert \
+    -device-model "YOUR-MODEL" -firmware "YOUR-FIRMWARE" \
+    -test-case mtls-without-device-cert
+```
+
+Restart the device and use a new Client ID with Clean Session/Start so an old TLS/MQTT session cannot mask the result.
+
+Expected: no accepted MQTT CONNACK. The tool usually records `tls/handshake/failure` with `client_certificate_missing` (heuristic) or an alert such as `certificate_required`; TLS 1.3 may surface the failure only when MQTT data is exchanged, so read the whole connection rather than just the TLS line. `timeout` or `peer_closed` alone does not prove that the device sent no certificate. The connection verdict may be `undetermined` here because no expectation was specified; that is normal.
+
+If the device connects anyway and the summary shows `client_certificate=present`, the device already has a certificate configured or a TLS-terminating proxy is in the path. Record the fingerprint, make sure `did_resume=false`, and rule out the proxy before concluding.
+
+#### 4.2 Device with a client certificate
+
+Import `device/device.crt` and `device/device.key` into the device as its client certificate and private key. Import intermediate certificates only if the vendor requires them. Keep `device/ca-a.crt` as the server trust anchor, restart the device, use a new Client ID and Clean Session/Start, and never import a CA private key.
+
+```sh
+./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
+    -server-cert certs/mtls-check/server/server.crt \
+    -server-key  certs/mtls-check/server/server.key \
+    -client-ca   certs/mtls-check/server/ca-a.crt \
+    -results results/03-mtls-with-device-cert -run-id device-mtls-with-cert \
+    -device-model "YOUR-MODEL" -firmware "YOUR-FIRMWARE" \
+    -test-case mtls-with-device-cert \
+    -expect-tls success -expect-connect accepted -expect-client-cert present
+```
+
+Expected: `verdict=pass`, `tls=success`, `client_certificate=present`, and the certificate fingerprint in `summary.json` matches `device/device.crt`:
+
+```sh
+openssl x509 -in certs/mtls-check/device/device.crt -noout -fingerprint -sha256
+```
+
+`did_resume=true` means the TLS session was resumed; restart the device or clear its session cache and repeat. A TLS-terminating proxy would make the tool see the proxy's certificate instead of the device's.
+
+- If the device refuses to import the files or reports a format/field/algorithm error, record this as an import failure. Try `--leaf-key-format traditional`, another `--key-alg`, or the vendor's required package format. It is not a server rejection.
+- If the handshake fails with `certificate_verification`, check the clientAuth EKU, validity period, device clock, missing intermediate certificates, and whether the device certificate is signed by the CA in `-client-ca`.
+- If the firmware has no way to import a client certificate and key, the firmware cannot be configured for mTLS; ask the vendor whether the hardware/firmware supports it.
+
+#### Verdict
+
+| One-way TLS baseline | mTLS without device certificate | mTLS with device certificate | Conclusion |
+| --- | --- | --- | --- |
+| pass | no accepted CONNACK; certificate missing | pass; `client_certificate=present`; fingerprint matches | Device supports mTLS. |
+| pass | no accepted CONNACK; certificate missing | import impossible or handshake fails with known-good material | Device uses one-way TLS in this firmware/configuration; mTLS is not usable. Confirm with the vendor. |
+| pass | connects; `client_certificate=present` | — | A certificate was already configured, or a TLS proxy is in the path. Inspect the fingerprint and rule out the proxy. |
+| fails | — | — | No conclusion; fix server-auth TLS (trust anchor, SAN, clock, TLS version) first. |
+| pass | not tested | not tested | Cannot tell; one-way TLS never requests a client certificate. |
+
+A failed handshake alone does not prove that mTLS is unsupported: wrong key format, algorithm, chain, clock or EKU can all cause it. Only report "unsupported" after the material is known-good (for example, the same material is accepted by `openssl s_client`) and the vendor confirms there is no way to configure it.
+
+Optional negative cases: repeat with the CA B-signed, expired, not-yet-valid and wrong-EKU device certificates under `device/negative/`; all should fail the handshake. If the device cannot import an invalid certificate, record that as a device import failure, not as a server rejection. Some devices perform certificate-based authentication at the MQTT application layer (for example, a certificate or signature in the CONNECT payload); these steps test TLS client certificates only.
+
+### 5. Optional: does the device validate the server certificate?
+
+This separates "TLS works" from "the device actually verifies the server". Keep the device trusting CA A and start one-way TLS with a certificate signed by CA B:
+
+```sh
+./MQTTDeviceTestingTool -mode tls -listen 0.0.0.0:8883 \
+    -server-cert certs/mtls-check/server/negative/server-by-ca-b.crt \
+    -server-key  certs/mtls-check/server/negative/server-by-ca-b.key
+```
+
+The device should reject the connection at the TLS stage. The other negative cases under `server/negative/` cover a hostname mismatch and an expired certificate; start the tool with `-allow-invalid-server-cert` only for the expired case. A device that accepts an untrusted server certificate does not provide meaningful server authentication, even if it can connect.
+
 ## LICENSE
 
 Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy](https://github.com/tongdysoft) MQTTDeviceTestingTool is licensed under Mulan PSL v2. You can use this software according to the terms and conditions of the Mulan PSL v2. You may obtain a copy of Mulan PSL v2 at: <http://license.coscl.org.cn/MulanPSL2> THIS SOFTWARE IS PROVIDED ON AN “AS IS” BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the Mulan PSL v2 for more details.
@@ -267,6 +427,8 @@ Copyright (c) 2022 [神楽坂雅詩](https://github.com/KagurazakaYashi)@[Tongdy
 - `plain`（默认）：普通 MQTT，不启用 TLS。只要传入 TLS 相关参数就会报错，不会被静默忽略。
 - `tls`：单向 TLS。必须提供 `-server-cert` 和 `-server-key`，服务器不请求设备证书。
 - `mtls`：强制双向 TLS。必须提供 `-server-cert`、`-server-key` 和 `-client-ca`，固定使用 `tls.RequireAndVerifyClientCert` 要求并验证设备证书。
+
+常用的设备连接、单向 TLS、mTLS 与服务器证书校验步骤见文末“常用实操步骤（最佳实践）”。
 
 TLS 参数：
 
@@ -415,121 +577,6 @@ bash scripts/gen-test-certs.sh -o "certs/设备测试-01" \
 MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
 ```
 
-### 真实设备手工测试流程
-
-以下流程中的“通过”仅代表本次实际观察到的配置、算法与固件组合，不代表设备支持所有客户 PKI、所有证书格式或身份绑定要求。设备“单一证书”与“三元组证书”的字段含义和拼接顺序仍未确认，必须先按设备文档核对，不能根据本工具猜测。
-
-#### 0. 先验证测试环境
-
-1. 用已知支持 mTLS 的软件客户端连接本工具，排除服务端材料、端口、防火墙与主机名问题。示例（需自行安装 OpenSSL 客户端工具）：
-
-   ```sh
-   openssl s_client -connect mqtt.example.com:8883 -servername mqtt.example.com \
-       -CAfile "certs/设备测试-01/device/ca-a.crt" \
-       -cert "certs/设备测试-01/device/device.crt" \
-       -key  "certs/设备测试-01/device/device.key"
-   ```
-
-   没有 `-cert`/`-key` 时应被拒绝；带正确材料时握手应成功。需要验证 MQTT 层时，可使用 `mosquitto_pub`/`mosquitto_sub` 等客户端，加上 `--cafile`、`--cert`、`--key`，不要使用跳过服务器校验的选项。
-
-2. 记录工具版本（`./MQTTDeviceTestingTool -version`）、实际模式、监听地址、TLS 版本范围与设备证书策略。启动摘要显示的是实际生效值，不是命令行输入。
-
-3. 每次切换证书、CA 或模式后重新启动工具，并在设备侧重新建立连接。设备的 TLS 会话缓存、MQTT 会话恢复和连接复用可能让“移除证书”的反例错误地继续使用旧会话；测试时应使用新的 Client ID、Clean Session/Start，必要时重启工具或设备。
-
-#### 1. 单向 TLS 基线
-
-- 工具使用 `-mode tls` 与正向 `server/server.crt`、`server/server.key`。
-- 设备导入 `device/ca-a.crt` 作为服务器信任锚，服务器地址必须匹配证书 SAN（DNS 或 IP）。
-- 预期：设备验证服务器成功，MQTT 连接按 `-users` 配置被接受。
-
-#### 2. 强制 mTLS：无证书必须被拒绝
-
-- 工具使用 `-mode mtls` 与 `-client-ca server/ca-a.crt`。
-- 设备清除客户端证书（或使用不含证书的配置）后重新连接。
-- 预期：TLS 握手失败，工具记录 `tls/handshake/failure`，原因通常是 `client_certificate_missing`（启发式）或设备收到的 `certificate_required` alert；不应出现成功的 CONNACK。若设备仍显示连接成功，优先检查会话恢复、代理终止 TLS 或设备实际仍在发送旧证书。
-
-#### 3. 强制 mTLS：正确三元组成功
-
-- 设备导入 `device/device.crt`、`device/device.key` 与 `device/ca-a.crt`。
-- 工具保持 `-client-ca server/ca-a.crt`。
-- 预期：TLS 握手成功，`client_certificate=present`，MQTT CONNACK 为接受。用 `-results` 与 `-expect-*` 可让工具自动判定，例如：
-
-  ```sh
-  ./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
-      -server-cert "certs/设备测试-01/server/server.crt" \
-      -server-key  "certs/设备测试-01/server/server.key" \
-      -client-ca   "certs/设备测试-01/server/ca-a.crt" \
-      -results "results/mtls-valid" -run-id mtls-valid \
-      -expect-tls success -expect-connect accepted -expect-client-cert present
-  ```
-
-#### 4. 强制 mTLS：不受信任或无效的设备证书必须被拒绝
-
-分别替换设备证书/私钥后重新连接，其他条件保持一致：
-
-- `device/negative/device-by-ca-b.crt`：签发者不在 `-client-ca` 中。
-- `device/negative/device-expired.crt`：已过期。
-- `device/negative/device-notyet.crt`：尚未生效。
-- `device/negative/device-wrong-eku.crt`：缺少 `clientAuth` 用途。
-
-预期均为 TLS 握手失败（`certificate_verification`、alert 或对端关闭），且没有 MQTT 认证成功。若设备无法导入无效证书，应记录为“设备导入失败”，不要记作“服务器拒绝了该证书”。
-
-#### 5. 设备拒绝无效服务器证书
-
-保持设备信任 `device/ca-a.crt`，分别让工具使用以下服务器材料：
-
-- `server/negative/server-by-ca-b.crt`：设备不受信任的签发者。
-- `server/negative/server-wrong-host.crt`：名称与设备连接地址不匹配。
-- `server/negative/server-expired.crt`：已过期；启动工具时需显式加 `-allow-invalid-server-cert` 才会放行服务器自身的语义检查。
-
-预期：设备在 TLS 握手阶段拒绝，工具侧通常看到失败或对端关闭，且没有 CONNECT/CONNACK。`-allow-invalid-server-cert` 只放行服务器证书语义检查，不会让设备信任该证书，也不会放宽设备证书验证。
-
-#### 6. 材料角色映射与待核对项
-
-| 标准角色 | 脚本材料 | 使用方 |
-| --- | --- | --- |
-| 服务器证书链 | `server/server.crt` | 工具 `-server-cert` |
-| 服务器私钥 | `server/server.key` | 工具 `-server-key` |
-| 验证设备证书的信任锚 | `server/ca-a.crt` | 工具 `-client-ca` |
-| 设备证书 | `device/device.crt` | 设备 |
-| 设备私钥 | `device/device.key` | 设备 |
-| 设备验证服务器的信任锚 | `device/ca-a.crt` | 设备 |
-| 不受信任的对照 CA | `device/negative/ca-b.crt` | 对照实验 |
-
-真实设备若要求“单一证书”或“三元组证书”，需向设备文档或厂商确认：设备证书是否必须包含中间证书、各字段的顺序与分隔方式、私钥格式（PKCS#1/SEC1/PKCS#8、是否加密）、CA 是否与设备证书放在同一文件，以及设备支持的密钥算法。确认前不要把多个 PEM 文件拼接后直接导入。
-
-#### 7. 结果记录模板
-
-```text
-测试日期：
-测试人员：
-设备型号：
-固件版本：
-工具版本（-version）：
-运行编号（-run-id）：
-测试模式（plain/tls/mtls）：
-监听地址与端口：
-TLS 版本范围：
-服务器证书主题 / SHA-256：
-设备证书主题 / SHA-256：
-设备信任锚 / SHA-256：
-设备 CA（工具 -client-ca）/ SHA-256：
-其他条件（用户名、Client ID、Clean Session、网络、代理、设备时钟）：
-
-预期：
-实际结果（阶段 / 结果 / 原因或 alert / CONNACK 返回码）：
-判定（通过 / 失败 / 未判定）：
-日志与结果位置（-log、-results 目录）：
-备注与后续动作：
-```
-
-失败按阶段区分：
-
-- **导入失败**：设备拒绝证书/私钥格式、字段缺失或文件过大，连接尚未建立。
-- **握手失败**：TCP 已建立，但 TLS 在证书验证、算法、协议版本或客户端证书要求处失败。
-- **MQTT 层失败**：TLS 成功，但 CONNACK 拒绝、订阅被拒或发布未授权；这类结果不能解释为 TLS 失败。
-
-
 ### 错误排查
 
 先看启动摘要确认实际模式、TLS 版本范围和设备证书策略，再看 `events.jsonl` 的阶段与 `certainty`，不要只根据终端最后一行判断。
@@ -643,6 +690,164 @@ build.bat
 ## 截图
 
 ![截图](screenshot-cn.png)
+
+## 常用实操步骤（最佳实践）
+
+以下按“普通连接 → 单向 TLS → mTLS → 服务器证书校验”的顺序操作。每一步只改变一个条件；切换证书、模式或重测反例时，重启设备并使用新的 Client ID 与 Clean Session/Start，避免 TLS/MQTT 会话恢复掩盖结果。每次运行使用新的 `-results` 目录，工具不会覆盖已有文件。
+
+### 0. 准备材料
+
+```sh
+bash scripts/gen-test-certs.sh -o "certs/设备测试-01" \
+    --san-dns "mqtt.example.com,localhost" \
+    --san-ip "192.168.1.10,127.0.0.1" \
+    --device-id dev-001
+```
+
+`--san-dns`/`--san-ip` 必须包含设备实际连接使用的主机名或 IP。材料角色：
+
+| 角色 | 文件 | 使用方 |
+| --- | --- | --- |
+| 服务器证书链 / 私钥 | `server/server.crt`、`server/server.key` | 工具 `-server-cert` / `-server-key` |
+| 验证设备证书的信任锚 | `server/ca-a.crt` | 工具 `-client-ca` |
+| 设备证书 / 私钥 | `device/device.crt`、`device/device.key` | 设备 |
+| 设备验证服务器的信任锚 | `device/ca-a.crt` | 设备 |
+| 反例设备证书 | `device/negative/` | 设备 |
+| 反例服务器证书 | `server/negative/` | 工具 |
+
+设备只接受传统私钥编码时加 `--leaf-key-format traditional`；只支持特定算法时加 `--key-alg ec-p256` 等。脚本只输出独立 PEM 文件；在厂商确认“单一证书/三元组”的字段顺序、拼接方式和编码前，不要自行拼接。任何 CA 私钥都不要导入设备。
+
+### 1. 先用软件客户端确认服务端
+
+```sh
+./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
+    -server-cert "certs/设备测试-01/server/server.crt" \
+    -server-key  "certs/设备测试-01/server/server.key" \
+    -client-ca   "certs/设备测试-01/server/ca-a.crt"
+```
+
+在另一个终端或另一台电脑上验证：
+
+```sh
+# 预期：握手失败（没有客户端证书）
+openssl s_client -connect 127.0.0.1:8883 -servername localhost \
+    -CAfile "certs/设备测试-01/device/ca-a.crt" </dev/null
+
+# 预期：Verify return code: 0 (ok)
+openssl s_client -connect 127.0.0.1:8883 -servername localhost \
+    -CAfile "certs/设备测试-01/device/ca-a.crt" \
+    -cert "certs/设备测试-01/device/device.crt" \
+    -key  "certs/设备测试-01/device/device.key" </dev/null
+```
+
+`-servername` 和连接地址必须在证书 SAN 范围内；如果不匹配，请重新生成材料或改用被覆盖的地址。完成本步后停止这个服务，再开始设备测试。
+
+### 2. 测试设备能否连接（普通 MQTT）
+
+```sh
+./MQTTDeviceTestingTool -mode plain -listen 0.0.0.0:1883 \
+    -results "results/00-普通连接" -run-id device-plain \
+    -device-model "设备型号" -firmware "固件版本" \
+    -test-case plain-baseline \
+    -expect-connect accepted
+```
+
+设备侧：关闭 TLS，连接测试电脑的 TCP 1883。如果使用 `-users`，按配置填写用户名和密码。工具不会修改防火墙规则。
+
+预期：`summary.json` 中 `mqtt_auth=accepted`。未提供 `-users` 时默认允许所有连接；如果被拒绝，先检查 `-users` 的 `auth` 配置。如果设备只支持 TLS，本步失败是预期的，可直接进入第 3 步；如果设备本应支持普通 MQTT，先解决网络、端口、防火墙、Client ID 和 MQTT 认证。
+
+### 3. 测试设备能否完成单向 TLS
+
+```sh
+./MQTTDeviceTestingTool -mode tls -listen 0.0.0.0:8883 \
+    -server-cert "certs/设备测试-01/server/server.crt" \
+    -server-key  "certs/设备测试-01/server/server.key" \
+    -results "results/01-单向TLS" -run-id device-tls-baseline \
+    -device-model "设备型号" -firmware "固件版本" \
+    -test-case tls-baseline \
+    -expect-tls success -expect-connect accepted
+```
+
+设备侧：导入 `device/ca-a.crt` 作为服务器信任锚（或签发服务器证书的 CA），连接地址必须与服务器证书 SAN 匹配，本轮不要配置客户端证书。确保设备能访问测试电脑的 TCP 8883 端口；本工具不会修改防火墙规则。每次重测都使用新的 `-results` 目录和新的 `-run-id`，工具不会覆盖已有结果文件。
+
+预期：设备连接成功，`summary.json` 中 `tls=success`、`mqtt_auth=accepted`、`client_certificate=absent`（服务器没有索取）。MQTT 认证由 `-users` 控制；未提供时默认全部允许。如果这一步失败，先检查信任锚、SAN、TLS 版本、设备时钟、端口与防火墙；此时还不能对 mTLS 下结论。不要在本模式加 `-expect-client-cert`，工具会正确判为 `undetermined`，因为单向 TLS 从不请求设备证书。
+
+### 4. 测试设备是否支持 mTLS
+
+单向 TLS 服务器从不请求设备证书，因此“设备有证书”和“设备没证书”在单向 TLS 下表现相同。要判断 mTLS，需要在 `-mode mtls` 下做两次连接。
+
+#### 4.1 设备不配置客户端证书
+
+保持设备与第 3 步相同的配置（未配置客户端证书），改用强制 mTLS：
+
+```sh
+./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
+    -server-cert "certs/设备测试-01/server/server.crt" \
+    -server-key  "certs/设备测试-01/server/server.key" \
+    -client-ca   "certs/设备测试-01/server/ca-a.crt" \
+    -results "results/02-mTLS-无设备证书" -run-id device-mtls-no-cert \
+    -device-model "设备型号" -firmware "固件版本" \
+    -test-case mtls-without-device-cert
+```
+
+重启设备，并使用新的 Client ID 与 Clean Session/Start，避免旧的 TLS/MQTT 会话掩盖结果。
+
+预期：没有成功的 CONNACK。工具侧通常记录 `tls/handshake/failure`，原因为 `client_certificate_missing`（启发式）或 alert `certificate_required`；TLS 1.3 可能到 MQTT 数据交换阶段才显现失败，因此要看整个连接，而不能只看 TLS 那一行。仅出现 `timeout` 或 `peer_closed` 不能证明设备没有发送证书。本步没有指定 `-expect-*`，汇总判定为 `undetermined` 属正常，应阅读观测事实。
+
+如果设备仍然连上，且汇总中 `client_certificate=present`：设备原本就配置了证书，或链路上存在终止 TLS 的代理。记录证书指纹、确认 `did_resume=false`，排除代理和会话恢复后再下结论。
+
+#### 4.2 设备配置客户端证书
+
+按厂商说明把 `device/device.crt` 与 `device/device.key` 导入设备，作为客户端证书和私钥；只有厂商明确要求时才附带中间证书。保持 `device/ca-a.crt` 为服务器信任锚，重启设备，使用新的 Client ID 与 Clean Session/Start，不要导入任何 CA 私钥。
+
+```sh
+./MQTTDeviceTestingTool -mode mtls -listen 0.0.0.0:8883 \
+    -server-cert "certs/设备测试-01/server/server.crt" \
+    -server-key  "certs/设备测试-01/server/server.key" \
+    -client-ca   "certs/设备测试-01/server/ca-a.crt" \
+    -results "results/03-mTLS-有设备证书" -run-id device-mtls-with-cert \
+    -device-model "设备型号" -firmware "固件版本" \
+    -test-case mtls-with-device-cert \
+    -expect-tls success -expect-connect accepted -expect-client-cert present
+```
+
+预期：`verdict=pass`、`tls=success`、`client_certificate=present`，且 `summary.json` 中的证书指纹与 `device/device.crt` 一致：
+
+```sh
+openssl x509 -in "certs/设备测试-01/device/device.crt" -noout -fingerprint -sha256
+```
+
+`did_resume=true` 表示 TLS 会话恢复，应重启设备或清除其会话缓存后重测；链路上有终止 TLS 的代理时，工具看到的是代理的证书。
+
+- 设备拒绝导入、提示格式/字段/算法错误时，记录为“导入失败”。可尝试 `--leaf-key-format traditional`、其他 `--key-alg` 或厂商要求的打包格式；这不是服务器拒绝了证书。
+- 握手失败且原因为 `certificate_verification` 时，检查 clientAuth 用途、有效期、设备时钟、是否缺少中间证书，以及设备证书是否由 `-client-ca` 指定的 CA 签发。
+- 固件没有导入客户端证书和私钥的入口时，该固件无法配置 mTLS；硬件是否支持需向厂商确认。
+
+#### 结论
+
+| 单向 TLS 基线 | mTLS + 设备无证书 | mTLS + 设备有证书 | 结论 |
+| --- | --- | --- | --- |
+| 通过 | 无成功 CONNACK；证书缺失 | 通过；`client_certificate=present`；指纹一致 | 设备支持 mTLS。 |
+| 通过 | 无成功 CONNACK；证书缺失 | 无法导入，或使用已知正确材料仍握手失败 | 该固件/配置只使用单向 TLS；mTLS 不可用，需向厂商确认。 |
+| 通过 | 仍能连接；`client_certificate=present` | — | 设备原本已有证书，或链路中有 TLS 代理；检查指纹并排除代理。 |
+| 失败 | — | — | 暂无结论；先修复服务器认证 TLS（信任锚、SAN、时钟、TLS 版本）。 |
+| 通过 | 未测试 | 未测试 | 无法判断；单向 TLS 从不请求设备证书。 |
+
+握手失败本身不能证明“不支持 mTLS”：私钥格式、算法、证书链、设备时钟或 EKU 错误都会导致失败。只有在材料已确认可用（例如同一套材料能被 `openssl s_client` 接受）且厂商确认设备没有配置入口后，才应报告“不支持”。
+
+可选反例：使用 `device/negative/` 下的 CA B 签发、过期、未生效、错误 EKU 证书分别重测，预期均为握手失败；设备无法导入无效证书时，记录为“设备导入失败”，不要记作“服务器拒绝了该证书”。有些设备把证书认证放在 MQTT 应用层（例如 CONNECT 负载中的证书或签名），本组步骤只验证 TLS 客户端证书。
+
+### 5. 测试设备是否校验服务器证书（可选）
+
+这一步区分“能建立 TLS”和“真的验证服务器身份”。保持设备信任 CA A，改用 CA B 签发的服务器证书：
+
+```sh
+./MQTTDeviceTestingTool -mode tls -listen 0.0.0.0:8883 \
+    -server-cert "certs/设备测试-01/server/negative/server-by-ca-b.crt" \
+    -server-key  "certs/设备测试-01/server/negative/server-by-ca-b.key"
+```
+
+设备应在 TLS 阶段拒绝连接。`server/negative/` 下还有主机名不匹配和已过期的服务器证书反例；使用过期证书启动工具时需加 `-allow-invalid-server-cert`。如果设备接受不受信任的服务器证书，即使能连接，也不具备有意义的服务器身份验证。
 
 ## 许可
 

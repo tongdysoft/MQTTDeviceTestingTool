@@ -47,6 +47,9 @@ type EventLogOptions struct {
 	DataPath      string
 	FileTimestamp bool
 	Monochrome    bool
+	// Protected 列出不得被日志截断的输入文件（例如证书、私钥、认证配置）。
+	// 日志路径与其中任一路径指向同一文件时，OpenEventLog 会在截断前失败。
+	Protected []FileRole
 }
 
 // EventLog 是并发安全的日志写入器。
@@ -74,6 +77,8 @@ type EventLog struct {
 
 // OpenEventLog 创建日志写入器。显式请求的日志文件无法打开时返回错误，
 // 由启动流程决定退出，而不是静默改用其他输出。
+// 冲突检查在截断任何文件之前完成；打开后还会再比较一次文件身份，
+// 缩小静态检查与实际截断之间的竞态窗口。
 func OpenEventLog(opts EventLogOptions) (*EventLog, error) {
 	l := &EventLog{
 		terminal:      opts.Terminal,
@@ -90,42 +95,98 @@ func OpenEventLog(opts EventLogOptions) (*EventLog, error) {
 		l.errorWriter = os.Stderr
 	}
 
-	open := func(path string) (*os.File, error) {
-		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	targets := []FileRole{
+		{Flag: "-log-data", Role: "data CSV log", Path: opts.DataPath, Kind: PathRoleOutput},
+		{Flag: "-log-status", Role: "status CSV log", Path: opts.StatusPath, Kind: PathRoleOutput},
+		{Flag: "-log", Role: "text log", Path: opts.TextPath, Kind: PathRoleOutput},
+	}
+	roles := make([]FileRole, 0, len(targets)+len(opts.Protected))
+	roles = append(roles, targets...)
+	roles = append(roles, opts.Protected...)
+	if err := CheckFileRoleConflicts(roles); err != nil {
+		return nil, err
+	}
+
+	opened := make([]*os.File, len(targets))
+	closeOpened := func() {
+		for _, file := range opened {
+			if file != nil {
+				_ = file.Close()
+			}
+		}
+	}
+	for i, target := range targets {
+		if target.Path == "" {
+			continue
+		}
+		// 先以不截断的方式打开：即使随后发现冲突，已有内容也保持不变。
+		file, err := os.OpenFile(target.Path, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
-			return nil, fmt.Errorf("cannot open log file %s: %w", path, err)
+			closeOpened()
+			return nil, fmt.Errorf("cannot open %s %s: %w", target.Role, target.Path, err)
 		}
-		return file, nil
+		opened[i] = file
 	}
-	var err error
-	if opts.DataPath != "" {
-		if l.data, err = open(opts.DataPath); err != nil {
-			l.closeFilesLocked()
-			return nil, err
+	if err := verifyLogFileIdentities(targets, opened, opts.Protected); err != nil {
+		closeOpened()
+		return nil, err
+	}
+	for i, file := range opened {
+		if file == nil {
+			continue
+		}
+		if err := file.Truncate(0); err != nil {
+			closeOpened()
+			return nil, fmt.Errorf("cannot truncate %s %s: %w", targets[i].Role, targets[i].Path, err)
+		}
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			closeOpened()
+			return nil, fmt.Errorf("cannot seek %s %s: %w", targets[i].Role, targets[i].Path, err)
 		}
 	}
-	if opts.StatusPath != "" {
-		if l.status, err = open(opts.StatusPath); err != nil {
-			l.closeFilesLocked()
-			return nil, err
-		}
-	}
-	if opts.TextPath != "" {
-		if l.text, err = open(opts.TextPath); err != nil {
-			l.closeFilesLocked()
-			return nil, err
-		}
-	}
+	l.data, l.status, l.text = opened[0], opened[1], opened[2]
 	return l, nil
 }
 
-func (l *EventLog) closeFilesLocked() {
-	for _, file := range []*os.File{l.text, l.status, l.data} {
-		if file != nil {
-			_ = file.Close()
+// verifyLogFileIdentities 在打开后、截断前复核文件身份，
+// 覆盖静态检查之后路径被替换（例如临时创建硬链接或符号链接）的情况。
+// 它不承诺防御所有并发文件系统攻击，只是把破坏性操作推迟到复核之后。
+func verifyLogFileIdentities(targets []FileRole, opened []*os.File, protected []FileRole) error {
+	infos := make([]os.FileInfo, len(opened))
+	for i, file := range opened {
+		if file == nil {
+			continue
+		}
+		info, err := file.Stat()
+		if err != nil {
+			return fmt.Errorf("cannot inspect opened %s %s: %w", targets[i].Role, targets[i].Path, err)
+		}
+		infos[i] = info
+	}
+	for i, info := range infos {
+		if info == nil {
+			continue
+		}
+		for j := 0; j < i; j++ {
+			if infos[j] != nil && os.SameFile(info, infos[j]) {
+				return conflictError(targets[i], targets[j], targets[i].Path)
+			}
+		}
+		for _, role := range protected {
+			if role.Path == "" {
+				continue
+			}
+			other, err := os.Stat(role.Path)
+			if err != nil {
+				// 输入文件不存在或不可访问由配置校验负责报告。
+				continue
+			}
+			if os.SameFile(info, other) {
+				return conflictError(targets[i], role, targets[i].Path)
+			}
 		}
 	}
-	l.text, l.status, l.data = nil, nil, nil
+	return nil
 }
 
 // Print 输出一条带图标和时间戳的日志行。nil 接收者表示不记录。

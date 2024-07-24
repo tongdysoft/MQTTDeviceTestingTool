@@ -82,6 +82,7 @@ func run() int {
 		DataPath:      cfg.LogDataFile,
 		FileTimestamp: cfg.FileTimestamp,
 		Monochrome:    cfg.Monochrome,
+		Protected:     cfg.InputFileRoles(),
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "log error:", err)

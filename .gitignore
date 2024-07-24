@@ -13,6 +13,7 @@ mqtt-test-server
 *.crt
 *.key
 /MQTTDeviceTestingTool
+/.*
 
 # 真实设备测试证书输出（含私钥，禁止提交）
 /certs/
@@ -22,9 +23,10 @@ mqtt-test-server
 /results/
 auth.json
 macOS/mqttdevicetestingtool/MQTTDeviceTestingTool_*
-A*.md
-M*.md
-.*
+/docs
+/.w*
+/M*.md
+/A*.md
 
 # Created by https://www.toptal.com/developers/gitignore/api/windows,macos,linux,csharp,visualstudio,visualstudiocode,go
 # Edit at https://www.toptal.com/developers/gitignore?templates=windows,macos,linux,csharp,visualstudio,visualstudiocode,go

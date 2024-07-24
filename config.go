@@ -286,7 +286,9 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("cannot access -results path %s: %w", c.ResultsDir, err)
 		}
 	}
-	if err := validateDistinctLogPaths(c.LogFile, c.LogStatusFile, c.LogDataFile); err != nil {
+	// 输入与输出、输出与输出必须在任何日志打开或结果创建之前确认不冲突。
+	// 这里只比较路径身份，不读取文件内容。
+	if err := CheckFileRoleConflicts(c.FileRoles()); err != nil {
 		return err
 	}
 
@@ -382,20 +384,6 @@ func validateListenAddress(address string) error {
 	}
 	if strings.ContainsAny(host, " \t\r\n") {
 		return fmt.Errorf("invalid listen host %q", host)
-	}
-	return nil
-}
-
-func validateDistinctLogPaths(paths ...string) error {
-	seen := map[string]struct{}{}
-	for _, path := range paths {
-		if path == "" {
-			continue
-		}
-		if _, exists := seen[path]; exists {
-			return fmt.Errorf("log files must use distinct paths: %s", path)
-		}
-		seen[path] = struct{}{}
 	}
 	return nil
 }
