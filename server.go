@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"time"
 
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
@@ -213,13 +214,58 @@ func (r *RunningServer) Diagnostics() *Diagnostics {
 }
 
 // Close 停止接收新连接、关闭现有连接、等待清理并完成结果导出，可重复调用。
-// 等待时间受 -shutdown-timeout 限制；超时会作为错误返回，而不是无限阻塞。
+//
+// 关闭预算 -shutdown-timeout 只计算一次：监听器用它设置所有连接的通知写期限，
+// 之后再用同一个期限等待连接处理与 mochi 的 ClientsWg；另加一个固定的本地
+// 收尾余量（不随连接数量累积）。mochi 的 CloseAll 在监听器返回后还有一次
+// 无期限的等待，这里在已完成底层连接关闭的前提下做有界等待，超时如实返回错误。
 func (r *RunningServer) Close() error {
 	r.closeOnce.Do(func() {
-		serverErr := r.server.Close()
+		budget := time.Duration(0)
+		if r.config != nil {
+			budget = r.config.ShutdownTimeout
+		}
+		var networkDeadline, cleanupDeadline time.Time
+		if budget > 0 {
+			networkDeadline = time.Now().Add(budget)
+			// 本地收尾余量用于连接被强制关闭后的 goroutine 调度与
+			// mochi CloseAll 自身的收尾；它是常数，不按连接累积。
+			cleanupDeadline = networkDeadline.Add(shutdownCompletionGrace)
+		}
+		r.listener.SetShutdownDeadline(networkDeadline)
+		// 即使 CloseAll 本身迟迟不进入监听器 Close，也要让已被本地关闭
+		// 打断的断连事件使用 shutdown 语义。
+		r.diag.MarkShuttingDown()
+
+		serverDone := make(chan error, 1)
+		go func() { serverDone <- r.server.Close() }()
+		var serverErr error
+		if err, done := awaitError(serverDone, cleanupDeadline); done {
+			serverErr = err
+		} else {
+			message := fmt.Sprintf("MQTT server cleanup did not finish within %s plus %s local cleanup grace", budget, shutdownCompletionGrace)
+			serverErr = errors.New(message)
+			r.diag.ShutdownCleanupFailed("server", message, r.listener.ActiveCount())
+		}
 		listenerErr := r.listener.CloseError()
-		diagErr := r.diag.Close()
+		diagErr := r.diag.CloseWithin(cleanupDeadline)
 		r.closeErr = errors.Join(serverErr, listenerErr, diagErr)
 	})
 	return r.closeErr
+}
+
+// awaitError 等待 done 返回结果；deadline 为零时无限等待。
+// 返回 done=false 表示预算耗尽，调用方必须自行报告，而不是假装清理完成。
+func awaitError(done <-chan error, deadline time.Time) (error, bool) {
+	if deadline.IsZero() {
+		return <-done, true
+	}
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err, true
+	case <-timer.C:
+		return nil, false
+	}
 }

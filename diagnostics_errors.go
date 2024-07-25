@@ -45,6 +45,17 @@ func classifyTLSFailure(err error) tlsFailureResult {
 	result.Reason = err.Error()
 	result.RawReason = errorChainText(err)
 
+	// 本地无法设置或清除期限不是对端行为：单独分类，不能归因于证书或设备。
+	var setupErr *deadlineSetupError
+	if errors.As(err, &setupErr) {
+		result.Kind = "local_setup_error"
+		result.Certainty = CertaintyObserved
+		result.ReasonCode = "local_setup_error"
+		result.Record.FailureKind = result.Kind
+		result.Reason = setupErr.Error()
+		return result
+	}
+
 	var alertErr tls.AlertError
 	if errors.As(err, &alertErr) {
 		code := uint8(alertErr)

@@ -327,10 +327,11 @@ type Diagnostics struct {
 	droppedFile  uint64
 	writeErrors  []string
 
-	closed    bool
-	closeOnce sync.Once
-	closeErr  error
-	final     *RunSummary
+	closed       bool
+	shuttingDown bool
+	closeOnce    sync.Once
+	closeErr     error
+	final        *RunSummary
 }
 
 type connectionRecord struct {
@@ -890,6 +891,51 @@ func (d *Diagnostics) TLSHandshakeFailed(id string, err error) string {
 	return failure.Certainty
 }
 
+// TLSHandshakeAborted 记录由本工具主动关闭打断的握手。
+// 该事件不增加 tls_failure 计数，避免把关闭操作解释为设备证书失败。
+func (d *Diagnostics) TLSHandshakeAborted(id, kind string, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	rec := d.byID[id]
+	if rec != nil {
+		rec.tlsResult = ResultUnknown
+		rec.tlsDetail = &TLSRecord{FailureKind: kind}
+	}
+	ctx := map[string]string{"failure_kind": kind}
+	if err != nil {
+		ctx["error"] = d.sanitizeLocked(err.Error())
+	}
+	d.emitLocked(Event{
+		ConnectionID: id,
+		Stage:        StageTLS,
+		Action:       "handshake",
+		Result:       ResultClosed,
+		Certainty:    CertaintyObserved,
+		Remote:       remoteOf(rec),
+		Reason:       "TLS 握手在完成前被本工具主动关闭；这不是设备证书结论",
+		TLS:          &TLSRecord{FailureKind: kind},
+		Context:      ctx,
+	})
+}
+
+// ShutdownCleanupFailed 记录关闭预算内未能完成本地清理。
+// 它描述工具自身的资源回收状态，不代表对端设备行为或证书结论。
+func (d *Diagnostics) ShutdownCleanupFailed(component, message string, pending int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.emitLocked(Event{
+		Stage:     StageRun,
+		Action:    "shutdown",
+		Result:    ResultFailure,
+		Certainty: CertaintyObserved,
+		Reason:    message,
+		Context: map[string]string{
+			"component": component,
+			"pending":   strconv.Itoa(pending),
+		},
+	})
+}
+
 // MQTTConnectReceived 表示收到 CONNECT 报文，此时尚未完成认证。
 func (d *Diagnostics) MQTTConnectReceived(id, clientID, username string, protocolVersion byte, cleanStart bool) {
 	d.mu.Lock()
@@ -1170,6 +1216,13 @@ func (d *Diagnostics) MQTTDisconnected(id, clientID string, err error, expire bo
 	reason, code, certainty := classifyMQTTError(err)
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	localShutdown := d.shuttingDown && (err == nil || isShutdownInterruption(err))
+	if localShutdown {
+		// 本地关闭导致的断连不是设备侧故障，统一标为 server_shutdown。
+		reason = "server_shutdown"
+		code = ""
+		certainty = CertaintyObserved
+	}
 	rec := d.byID[id]
 	if rec != nil {
 		rec.disconnect = "observed"
@@ -1178,7 +1231,7 @@ func (d *Diagnostics) MQTTDisconnected(id, clientID string, err error, expire bo
 	}
 	d.counts.DisconnectEvents++
 	result := ResultClosed
-	if err != nil {
+	if err != nil && !localShutdown {
 		result = ResultFailure
 	}
 	ctx := map[string]string{"session_expired": boolString(expire)}
@@ -1197,6 +1250,14 @@ func (d *Diagnostics) MQTTDisconnected(id, clientID string, err error, expire bo
 		ReasonCode:   code,
 		Context:      ctx,
 	})
+}
+
+// MarkShuttingDown 让本地关闭之后的断连事件使用 shutdown 语义。
+// 它不改变证书验证或认证结果。
+func (d *Diagnostics) MarkShuttingDown() {
+	d.mu.Lock()
+	d.shuttingDown = true
+	d.mu.Unlock()
 }
 
 // ConnectionClosed 记录传输层关闭；与 MQTT 断开事件分开，避免丢失原因。
@@ -1457,7 +1518,8 @@ func (t *terminalWriter) enqueue(line string) bool {
 }
 
 // stop 关闭队列并等待排空；超时或写入错误会作为摘要返回。
-func (t *terminalWriter) stop() []string {
+// deadline 非零时使用调用方的绝对期限，不重新获得完整超时预算。
+func (t *terminalWriter) stop(deadline time.Time) []string {
 	t.mu.Lock()
 	if !t.stopped {
 		t.stopped = true
@@ -1466,13 +1528,23 @@ func (t *terminalWriter) stop() []string {
 	t.mu.Unlock()
 
 	var messages []string
-	if t.timeout > 0 {
-		timer := time.NewTimer(t.timeout)
+	timeout := t.timeout
+	if !deadline.IsZero() {
+		timeout = time.Until(deadline)
+	}
+	if timeout > 0 {
+		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 		select {
 		case <-t.done:
 		case <-timer.C:
-			messages = append(messages, fmt.Sprintf("terminal output did not flush within %s", t.timeout))
+			messages = append(messages, fmt.Sprintf("terminal output did not flush within %s", timeout))
+		}
+	} else if !deadline.IsZero() {
+		select {
+		case <-t.done:
+		default:
+			messages = append(messages, "terminal output did not flush before the shutdown deadline")
 		}
 	} else {
 		<-t.done
@@ -1503,14 +1575,23 @@ func (d *Diagnostics) Summary() RunSummary {
 }
 
 // Close 完成事件刷盘与 summary.json 写入，可重复调用。
+// 终端排空使用创建时配置的关闭期限。
 func (d *Diagnostics) Close() error {
+	return d.CloseWithin(time.Time{})
+}
+
+// CloseWithin 使用调用方统一的绝对期限完成收尾。
+// deadline 为零时退回创建时配置的关闭期限。
+// 事件文件与 summary 的同步文件 I/O 无法被强制取消，这里只限制
+// 终端队列排空这一可等待阶段；文件写入错误仍会返回。
+func (d *Diagnostics) CloseWithin(deadline time.Time) error {
 	d.closeOnce.Do(func() {
-		d.closeErr = d.finalize()
+		d.closeErr = d.finalize(deadline)
 	})
 	return d.closeErr
 }
 
-func (d *Diagnostics) finalize() error {
+func (d *Diagnostics) finalize(deadline time.Time) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.closed {
@@ -1525,7 +1606,7 @@ func (d *Diagnostics) finalize() error {
 	d.closed = true
 	d.endedAt = d.now()
 	if d.terminalOut != nil {
-		for _, message := range d.terminalOut.stop() {
+		for _, message := range d.terminalOut.stop(deadline) {
 			d.noteWriteErrorLocked(errors.New(message))
 		}
 		d.terminalOut = nil
