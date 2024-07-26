@@ -101,6 +101,13 @@ CSV columns: status logs contain time, client, event and detail; data logs conta
 - `-h`, `-help`
   - Print all flags with their default values and exit with code `0`.
 
+File and output path protection:
+
+- All input materials (`-server-cert`, `-server-key`, `-server-key-password-file`, `-client-ca`, `-users`) and all outputs (`-log`, `-log-status`, `-log-data`, `-results/events.jsonl`, `-results/summary.json`) are compared before any file is opened, truncated or created.
+- One file reached through relative/absolute paths, `.`/`..`, symlinks, hard links or a symlinked parent directory is rejected with exit code `2`; the error names both parameters, and any existing content is left byte-for-byte unchanged.
+- Two input parameters may share one file; an input may never be an output, and two outputs may never resolve to the same file. The results directory is not created when a conflict is detected.
+- The check and the later open are separate operations, so a concurrent replacement in between is not fully preventable. Do not point outputs at a directory another process rewrites at the same time; the tool does not claim otherwise.
+
 Diagnostics and result export:
 
 - `-run-id string`
@@ -121,13 +128,13 @@ Diagnostics and result export:
 Connection lifecycle options:
 
 - `-handshake-timeout duration`
-  - Maximum time for a TLS handshake (default `10s`). A client that does not finish the handshake is disconnected and recorded with its observed failure classification.
+  - Maximum duration of the TLS handshake (default `10s`). It is one absolute deadline that covers both reading and writing, so a peer that sends a ClientHello and then stops reading cannot hold the handshake open through blocked server writes. The deadline is cleared only after a successful handshake, before the MQTT CONNECT phase. On timeout, on failure or when the server is shutting down, the connection is closed and the handshake slot is released; shutdown cancels a running handshake immediately instead of waiting for the timeout.
 - `-connect-timeout duration`
-  - Maximum time from accept (or from a completed TLS handshake) until an MQTT CONNECT packet is received (default `30s`). This bounds silent TCP/TLS connections that never speak MQTT.
+  - Maximum time from accept (or from a completed TLS handshake) until a complete MQTT CONNECT packet is received (default `30s`). This bounds silent TCP/TLS connections that never speak MQTT. If the deadline cannot be applied, the connection is closed instead of being left unbounded.
 - `-max-handshakes n`
   - Maximum number of concurrent TLS handshakes (default `64`, range `1`-`4096`). Additional connections wait in the listen backlog; the limit covers the handshake phase only, not established MQTT sessions.
 - `-shutdown-timeout duration`
-  - Maximum time to wait for existing connections to finish and for pending diagnostic output to flush during shutdown (default `10s`). On timeout the shutdown returns an error instead of blocking forever.
+  - Single absolute shutdown budget (default `10s`). The same deadline covers MQTT DISCONNECT notifications, closing the underlying connections, waiting for connection handlers and MQTT server cleanup, plus a fixed small local grace that does not grow with the number of connections. A peer that stops reading cannot extend the budget through a blocked notification write. If cleanup still exceeds the budget, the error is reported, the summary records an incomplete shutdown and the process exits with code `1`; the tool never waits forever. Synchronous file/terminal I/O cannot be interrupted and is only reported after the fact.
 - `-pprof-listen address`
   - Disabled by default. When set, starts the pprof HTTP diagnostics listener on this address (for example `127.0.0.1:6060`). Binding a non-loopback address produces a warning; the listener is stopped during shutdown.
 
@@ -194,11 +201,13 @@ GOMAXPROCS=$BUDGET go test -race -count=1 -p "$BUDGET" -parallel "$BUDGET" ./...
 
 On Windows, replace `$(nproc)` with the number of logical processors and keep the same half-budget rule (minimum 1).
 
-The optional certificate-script integration test is enabled explicitly:
+The optional certificate-script integration tests are enabled explicitly (bash and OpenSSL are required; without them the tests skip with a reason, and the default suite does not fail):
 
 ```sh
-MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
+MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScript -v
 ```
+
+This runs the material generation test, the wildcard/hostname-match test and the invalid-SAN rejection test.
 
 Cross-compilation only proves that the target builds; it is not a run-time verification on Windows or macOS:
 
@@ -224,7 +233,26 @@ bash scripts/gen-test-certs.sh -o certs/mtls-check \
     --device-id dev-001
 ```
 
-Set the SAN values to the exact hostname/IP the device connects to. Material roles:
+Set the SAN values to the exact hostname/IP the device connects to.
+
+`--san-dns` also accepts a standard wildcard, but only as the complete leftmost label: `*.example.com` is valid, while `*example.com`, `foo.*.example.com`, multiple asterisks and empty labels are rejected with exit code `2`. Quote the value so the shell cannot expand it, and connect the device to a name the wildcard actually covers:
+
+```sh
+bash scripts/gen-test-certs.sh -o certs/wildcard \
+    --san-dns '*.example.com' --san-ip ''
+```
+
+The wildcard is written into the SAN literally (never as a file name), and the script's own check uses concrete names: `mqtt.example.com` must verify, while `example.com` and `a.b.example.com` must fail. Verify it yourself:
+
+```sh
+openssl x509 -in certs/wildcard/server/server.crt -noout -ext subjectAltName
+openssl verify -verify_hostname mqtt.example.com \
+    -CAfile certs/wildcard/device/ca-a.crt certs/wildcard/server/server.crt
+```
+
+`--san-ip ''` generates a certificate without IP SANs; omit it to keep the default `127.0.0.1`. A wildcard is a matching pattern, not a hostname: the device must connect to a name below it and still import the server trust anchor.
+
+Material roles:
 
 | Role | Files | Used by |
 | --- | --- | --- |
@@ -484,6 +512,13 @@ CSV 列：状态日志为“时间、客户端、事件、说明”，数据日�
 - `-h`、`-help`
   - 打印全部参数及默认值并退出，退出码为 `0`。
 
+文件与输出路径保护：
+
+- 所有输入材料（`-server-cert`、`-server-key`、`-server-key-password-file`、`-client-ca`、`-users`）与所有输出（`-log`、`-log-status`、`-log-data`、`-results/events.jsonl`、`-results/summary.json`）在打开、截断或创建之前统一比较。
+- 同一文件通过相对/绝对路径、`.`/`..`、符号链接、硬链接或父目录符号链接指向时，启动直接失败（退出码 `2`），错误会同时写出两个参数名，已有文件内容一个字节也不会被改动。
+- 两个输入参数可以共用同一文件；输入不能作为输出，两个输出也不能解析为同一文件。检测到冲突时不会创建结果目录。
+- 路径检查与实际打开是两次操作，两者之间的并发替换无法完全防御；不要把他人的实时重写目录作为输出目录，工具也不作此承诺。
+
 诊断与结果导出参数：
 
 - `-run-id 字符串`
@@ -516,13 +551,13 @@ CSV 列：状态日志为“时间、客户端、事件、说明”，数据日�
 连接生命周期参数：
 
 - `-handshake-timeout 时长`
-  - TLS 握手的最长等待时间（默认 `10s`）。超时的客户端会被断开，并按可观察到的失败类型记录。
+  - TLS 握手的绝对期限（默认 `10s`），同时覆盖读与写：对端发送 ClientHello 后停止读取时，服务端阻塞的写入也会在期限到点后失败，无法长期占住握手槽。握手成功后、进入 MQTT CONNECT 阶段前清除该期限；超时、失败或服务端关闭都会关闭连接并释放槽位，关闭流程会立即取消正在进行的握手，而不是等期限自然到点。
 - `-connect-timeout 时长`
-  - 从接入（或 TLS 握手完成）到收到 MQTT CONNECT 的最长等待时间（默认 `30s`）。用于关闭始终不发送 MQTT 报文的静默连接。
+  - 从接入（或 TLS 握手完成）到收到完整 MQTT CONNECT 的最长等待时间（默认 `30s`），用于关闭始终不发送 MQTT 报文的静默连接。如果期限无法设置，工具会直接关闭连接，而不是放任无限等待。
 - `-max-handshakes 数量`
   - 最大并发 TLS 握手数（默认 `64`，范围 `1`-`4096`）。超出的连接在监听 backlog 中排队；该限制只覆盖握手阶段，不限制已建立的 MQTT 会话。
 - `-shutdown-timeout 时长`
-  - 关闭时等待现有连接结束与诊断输出刷盘的最长时间（默认 `10s`）。超时会返回错误，而不是无限阻塞。
+  - 关闭时使用的一次性绝对预算（默认 `10s`）。同一期限覆盖向客户端写 MQTT DISCONNECT、关闭底层连接、等待各连接处理与 MQTT 服务端收尾，另加一个不随连接数增长的固定本地收尾余量。对端不读取时，通知写会被同一期限打断，不会把预算延长或按连接重复累计。即使如此仍未完成时，工具会报告错误、在 `summary.json` 记录关闭未完成，并以退出码 `1` 结束，不会无限等待。同步文件/终端 I/O 无法中断，只能在超时后如实报告。
 - `-pprof-listen 地址`
   - 默认关闭。设置后在指定地址启动 pprof HTTP 诊断监听（例如 `127.0.0.1:6060`）。绑定非回环地址会输出警告；退出时会一并关闭。
 
@@ -574,8 +609,10 @@ bash scripts/gen-test-certs.sh -o "certs/设备测试-01" \
 脚本只用于人工测试材料，基础 `go test` 不依赖它。可选的脚本集成测试需显式启用（需要 bash 与 OpenSSL；未安装相关工具时会明确 Skip）：
 
 ```sh
-MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
+MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScript -v
 ```
+
+该命令覆盖普通材料、通配符/主机名匹配与非法 SAN 拒绝；只运行单项时可加子测试名，例如 `-run TestOpenSSLScriptMaterial`。
 
 ### 错误排查
 
@@ -584,7 +621,9 @@ MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
 | 现象 | 优先检查 |
 | --- | --- |
 | 启动退出码 `2` | 参数冲突、未知模式、TLS 版本、数值范围、文件不存在；错误写在 stderr |
+| 启动退出码 `2` 且提示 `file path conflict` | 输入材料与 `-log`/`-log-status`/`-log-data`/`-results` 输出指向同一文件（含符号链接、硬链接、`./` 等别名）；文件未被打开或截断，改用不同路径 |
 | 启动退出码 `1` | 证书/私钥读取或解析、私钥密码、私钥不配对、链结构、监听端口或结果目录 |
+| 关闭耗时接近 `-shutdown-timeout` 或退出码 `1` | 对端不读取导致 DISCONNECT 写阻塞、连接处理未退出；期限为一次性绝对预算，不按连接累加，查看 `summary.json` 的关闭清理错误 |
 | `tls/handshake/failure` + `certificate_verification` | 设备证书签发者是否在 `-client-ca`、是否过期/未生效、是否含 `clientAuth`、中间证书是否完整 |
 | `client_certificate_missing`（`heuristic`） | 设备是否真的发送证书；同时排除 TLS 会话恢复、代理终止 TLS 与旧连接复用 |
 | `tls_record` / `not_tls_record` | 客户端把明文发到 TLS 端口、端口错误或代理改写了流量 |
@@ -664,11 +703,13 @@ GOMAXPROCS=$BUDGET go test -race -count=1 -p "$BUDGET" -parallel "$BUDGET" ./...
 
 Windows 下没有 `nproc` 时，请按逻辑处理器数量手动设置同样的“一半、最少 1”预算。
 
-可选证书脚本集成测试（需要 bash 与 OpenSSL 1.1.1+；缺少时明确 Skip）：
+可选证书脚本集成测试（需要 bash 与 OpenSSL 1.1.1+；缺少时明确 Skip，不影响基础测试）：
 
 ```sh
-MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
+MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScript -v
 ```
+
+该命令同时运行材料生成、通配符/主机名匹配和非法 SAN 拒绝三组测试。
 
 交叉编译只证明目标平台能编译，不代表已在目标平台运行：
 
@@ -716,6 +757,24 @@ bash scripts/gen-test-certs.sh -o "certs/设备测试-01" \
 | 反例服务器证书 | `server/negative/` | 工具 |
 
 设备只接受传统私钥编码时加 `--leaf-key-format traditional`；只支持特定算法时加 `--key-alg ec-p256` 等。脚本只输出独立 PEM 文件；在厂商确认“单一证书/三元组”的字段顺序、拼接方式和编码前，不要自行拼接。任何 CA 私钥都不要导入设备。
+
+需要匹配任意单层子域名时，`--san-dns` 支持标准通配符，但星号必须覆盖完整的最左侧标签：`*.example.com` 合法；`*example.com`、`foo.*.example.com`、多个星号与空标签会被拒绝（退出码 `2`）。用单引号防止 shell 展开，并让设备连接到通配符实际覆盖的主机名：
+
+```sh
+bash scripts/gen-test-certs.sh -o "certs/通配符测试" \
+    --san-dns '*.example.com' --san-ip ''
+```
+
+通配符会原样写入 SAN（不会变成文件名或被当成 CN），脚本自检使用具体主机名：`mqtt.example.com` 必须通过，`example.com` 与 `a.b.example.com` 必须被拒绝。可自行核对：
+
+```sh
+openssl x509 -in "certs/通配符测试/server/server.crt" -noout -ext subjectAltName
+openssl verify -verify_hostname mqtt.example.com \
+    -CAfile "certs/通配符测试/device/ca-a.crt" \
+    "certs/通配符测试/server/server.crt"
+```
+
+`--san-ip ''` 表示不生成 IP SAN；省略该参数则保留默认 `127.0.0.1`。通配符是匹配模式而不是主机名：设备必须连接到其覆盖的主机名，并仍将 `device/ca-a.crt` 导入为服务器信任锚。
 
 ### 1. 先用软件客户端确认服务端
 

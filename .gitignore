@@ -14,6 +14,7 @@ mqtt-test-server
 *.key
 /MQTTDeviceTestingTool
 /.*
+RELEASE_NOTES.md
 
 # 真实设备测试证书输出（含私钥，禁止提交）
 /certs/

@@ -16,6 +16,9 @@
 # =============================================================================
 
 set -euo pipefail
+# 关闭路径名展开：SAN 中的通配符（*.example.com）必须原样进入证书，
+# 不能被 shell 当作文件名匹配。列表拆分统一使用 read -a，不依赖 glob。
+set -f
 umask 077
 
 # 先检查 bash 版本：脚本后面的 mapfile 等语法需要 bash 4+，
@@ -95,7 +98,10 @@ usage() {
   -o, --out DIR             输出目录；必须不存在。默认
                             <仓库>/certs/test-certs-YYYYmmdd-HHMMSS
       --server-name NAME    服务器证书 CN（仅 ASCII），默认 mqtt-server
-      --san-dns LIST        服务器证书 DNS SAN，逗号分隔，默认 localhost
+      --san-dns LIST        服务器证书 DNS SAN，逗号分隔，默认 localhost。
+                            支持标准通配符，但只能覆盖完整的最左侧标签，
+                            例如 *.example.com；*example.com、foo.*.example.com
+                            与多个星号都会被拒绝
       --san-ip LIST         服务器证书 IP SAN，逗号分隔，默认 127.0.0.1
       --device-id NAME      设备证书 CN（设备标识），仅允许 ASCII 字母、数字、
                             . _ -，默认 device-001
@@ -116,8 +122,12 @@ usage() {
       --san-dns "mqtt.example.com,localhost" \
       --san-ip "192.168.1.10,127.0.0.1" --device-id dev-001 \
       --validity-days 180 --key-alg ec-p256
+  bash scripts/gen-test-certs.sh -o "$HOME/设备测试/certs-wildcard" \
+      --san-dns '*.example.com' --san-ip ''
 
 注意：
+  * 通配符 SAN 只是证书里的匹配模式；脚本自检会用 mqtt.example.com 这类
+    具体主机名验证，并确认根域和多层子域不会被同一个通配符接受。
   * 输出目录已存在时脚本直接报错，不会覆盖任何已有密钥或材料。
   * 生成过程失败会删除本次未完成的临时目录，避免残缺材料被误用。
   * 设备“单一证书 / 三元组”的拼接格式尚未确认，本脚本只输出独立 PEM 文件。
@@ -238,11 +248,12 @@ case "$LEAF_KEY_FORMAT" in
 esac
 
 # 去掉逗号两侧空白，得到数组；空列表表示不使用该类 SAN。
+# 使用 read -a 而不是未加引号的 $value：后者会对 *.example.com 做路径名展开。
 split_list() {
   local value=$1 item
-  local -a result=()
-  local IFS=','
-  for item in $value; do
+  local -a raw=() result=()
+  IFS=',' read -r -a raw <<< "$value"
+  for item in "${raw[@]}"; do
     item=${item#"${item%%[![:space:]]*}"}
     item=${item%"${item##*[![:space:]]}"}
     [[ -n $item ]] && result+=("$item")
@@ -257,9 +268,37 @@ mapfile -t DNS_LIST < <(split_list "$SAN_DNS")
 mapfile -t IP_LIST < <(split_list "$SAN_IP")
 ((${#DNS_LIST[@]} + ${#IP_LIST[@]} > 0)) || die_usage "至少要提供一个 DNS 或 IP SAN"
 
+# DNS SAN 规则（只做语法判定，不查询公共后缀，也不判断域名是否真实存在）：
+#   example.com / localhost     普通 ASCII 主机名
+#   *.example.com               通配符，原样写入 SAN，只覆盖最左侧完整标签
+#   *example.com                NO：星号没有覆盖整个标签
+#   foo.*.example.com / *.*.example.com   NO：星号不在最左侧或存在多个星号
+#   空标签、首尾连字符、超长标签  NO
+validate_dns_san() {
+  local value=$1 host=$1 label
+  if [[ $value == *'*'* ]]; then
+    [[ $value == '*.'* ]] \
+      || die_usage "DNS SAN 通配符必须覆盖完整的最左侧标签，例如 *.example.com：$value"
+    host=${value#'*.'}
+    [[ $host != *'*'* ]] \
+      || die_usage "DNS SAN 只允许一个通配符，且必须位于最左侧标签：$value"
+  fi
+  [[ -n $host ]] || die_usage "DNS SAN 含空标签：$value"
+  ((${#host} <= 253)) || die_usage "DNS SAN 过长（最多 253 字符）：$value"
+  [[ $host != *. && $host != .* && $host != *..* ]] \
+    || die_usage "DNS SAN 含空标签：$value"
+  local -a labels=()
+  IFS='.' read -r -a labels <<< "$host"
+  for label in "${labels[@]}"; do
+    ((${#label} >= 1 && ${#label} <= 63)) \
+      || die_usage "DNS SAN 标签长度必须在 1-63 之间：$value"
+    [[ $label =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] \
+      || die_usage "DNS SAN 标签只能包含 ASCII 字母、数字和内部连字符：$value"
+  done
+}
+
 for d in "${DNS_LIST[@]+"${DNS_LIST[@]}"}"; do
-  [[ $d =~ ^\*?[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] \
-    || die_usage "DNS SAN 不合法（仅支持 ASCII 主机名或前置 * 的通配符）：$d"
+  validate_dns_san "$d"
 done
 for ip in "${IP_LIST[@]+"${IP_LIST[@]}"}"; do
   if [[ $ip == *:* ]]; then
@@ -561,16 +600,25 @@ write_ext_file() {
     printf '\n'
     if [[ $usage == server ]]; then
       printf '[ %s_alt ]\n' "$section"
-      local i=1 d
-      local IFS=','
-      for d in $dns_csv; do
+      local i=0 d
+      local -a alt_dns=() alt_ip=()
+      if [[ -n $dns_csv ]]; then
+        IFS=',' read -r -a alt_dns <<< "$dns_csv"
+      fi
+      if [[ -n $ip_csv ]]; then
+        IFS=',' read -r -a alt_ip <<< "$ip_csv"
+      fi
+      # 逐项原样写入，不做 glob 展开：DNS.1 = *.example.com 是证书中的匹配模式。
+      for d in "${alt_dns[@]+"${alt_dns[@]}"}"; do
+        [[ -n $d ]] || continue
+        i=$((i + 1))
         printf 'DNS.%d = %s\n' "$i" "$d"
-        i=$((i + 1))
       done
-      i=1
-      for d in $ip_csv; do
-        printf 'IP.%d = %s\n' "$i" "$d"
+      i=0
+      for d in "${alt_ip[@]+"${alt_ip[@]}"}"; do
+        [[ -n $d ]] || continue
         i=$((i + 1))
+        printf 'IP.%d = %s\n' "$i" "$d"
       done
       printf '\n'
     fi
@@ -730,17 +778,75 @@ verify_fail() {
 
 CA_A="$CA_ROOT/ca-a/ca-a.crt"
 CA_B="$CA_ROOT/ca-b/ca-b.crt"
+
+# ---------------------------------------------------------------------------
+# 主机名自检的样例选择
+#
+# -verify_hostname 接受的是具体主机名，而不是匹配模式。因此通配符 SAN 必须
+# 换成一个具体主机名（例如 *.example.com → mqtt.example.com）再验证；同时用
+# 根域和多层子域名确认这个通配符没有覆盖到多一级标签。
+# --------------------------------------------------------------------------
 FIRST_DNS=""
+FIRST_WILDCARD=""
 for candidate in "${DNS_LIST[@]+"${DNS_LIST[@]}"}"; do
-  # 通配符 SAN 不能直接传给 -verify_hostname，跳过它选择一个具体主机名。
-  [[ $candidate == \** ]] && continue
-  FIRST_DNS=$candidate
-  break
+  if [[ $candidate == '*.'* ]]; then
+    [[ -n $FIRST_WILDCARD ]] || FIRST_WILDCARD=$candidate
+    continue
+  fi
+  [[ -n $FIRST_DNS ]] || FIRST_DNS=$candidate
 done
 FIRST_IP=${IP_LIST[0]:-}
-# 负例使用与 wrong-host.invalid 不同的名字，避免恰好匹配反例证书的 SAN。
-HOSTNAME_CHECK=${FIRST_DNS:-device-check.invalid}
-[[ $HOSTNAME_CHECK == wrong-host.invalid ]] && HOSTNAME_CHECK=device-check.invalid
+WILDCARD_BASE=""
+WILDCARD_CONCRETE=""
+WILDCARD_DEEP=""
+if [[ -n $FIRST_WILDCARD ]]; then
+  WILDCARD_BASE=${FIRST_WILDCARD#'*.'}
+  WILDCARD_CONCRETE="mqtt.$WILDCARD_BASE"
+  WILDCARD_DEEP="a.b.$WILDCARD_BASE"
+fi
+
+# 判断主机名是否会被某个已配置的 DNS SAN 接受（与通配符只覆盖最左标签的
+# 规则一致），用于选择不与正向 SAN 冲突的反例主机名。主机名比较按 DNS
+# 语义不区分大小写。
+san_matches_name() {
+  local name=$1 entry lname base prefix
+  lname=${name,,}
+  for entry in "${DNS_LIST[@]+"${DNS_LIST[@]}"}"; do
+    entry=${entry,,}
+    [[ $entry == "$lname" ]] && return 0
+    if [[ $entry == '*.'* ]]; then
+      base=${entry#'*.'}
+      if [[ $lname == *".$base" ]]; then
+        prefix=${lname%".$base"}
+        [[ -n $prefix && $prefix != *.* ]] && return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+# 反例主机名必须既不匹配任何正向 SAN，也不是 wrong-host 反例证书的 SAN。
+pick_unmatched_hostname() {
+  local candidate i
+  for candidate in device-check.invalid device-check.example device-check.test \
+    device-check.local.invalid hostname-check.invalid; do
+    [[ $candidate == wrong-host.invalid ]] && continue
+    san_matches_name "$candidate" || {
+      printf '%s' "$candidate"
+      return 0
+    }
+  done
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    candidate="device-check-$i.invalid"
+    san_matches_name "$candidate" || {
+      printf '%s' "$candidate"
+      return 0
+    }
+  done
+  die "内部错误：无法选择不与服务器 SAN 冲突的反例主机名"
+}
+
+HOSTNAME_CHECK=$(pick_unmatched_hostname)
 
 assert_key_pair "CA A" "$CA_A" "$CA_ROOT/ca-a/ca-a.key"
 assert_key_pair "CA B" "$CA_B" "$CA_ROOT/ca-b/ca-b.key"
@@ -763,6 +869,18 @@ verify_ok "设备证书用途 sslclient" -purpose sslclient -CAfile "$CA_A" "$DE
 if [[ -n $FIRST_DNS ]]; then
   verify_ok "服务器证书 DNS SAN 匹配：$FIRST_DNS" \
     -verify_hostname "$FIRST_DNS" -CAfile "$CA_A" "$SERVER_DIR/server.crt"
+fi
+if [[ -n $WILDCARD_CONCRETE ]]; then
+  verify_ok "服务器证书通配符 SAN 匹配具体主机名：$WILDCARD_CONCRETE（SAN $FIRST_WILDCARD）" \
+    -verify_hostname "$WILDCARD_CONCRETE" -CAfile "$CA_A" "$SERVER_DIR/server.crt"
+  if ! san_matches_name "$WILDCARD_BASE"; then
+    verify_fail "通配符 SAN 不接受根域：$WILDCARD_BASE" "hostname mismatch" \
+      -verify_hostname "$WILDCARD_BASE" -CAfile "$CA_A" "$SERVER_DIR/server.crt"
+  fi
+  if ! san_matches_name "$WILDCARD_DEEP"; then
+    verify_fail "通配符 SAN 不接受多层子域：$WILDCARD_DEEP" "hostname mismatch" \
+      -verify_hostname "$WILDCARD_DEEP" -CAfile "$CA_A" "$SERVER_DIR/server.crt"
+  fi
 fi
 if [[ -n $FIRST_IP ]]; then
   verify_ok "服务器证书 IP SAN 匹配：$FIRST_IP" \
@@ -814,6 +932,18 @@ WRONG_HOST_SAN=$("$OPENSSL_BIN" x509 -in "$(to_openssl_path "$SERVER_DIR/negativ
   -noout -ext subjectAltName 2>>"$OPENSSL_LOG") || die "读取 SAN 失败"
 [[ $WRONG_HOST_SAN == *wrong-host.invalid* ]] || die "SAN 不匹配反例的 SAN 内容异常"
 check_ok "SAN 不匹配反例只包含 wrong-host.invalid"
+
+# 正向服务器证书的 SAN 必须与用户配置逐项一致：通配符原样保留，IP 不丢。
+SERVER_SAN=$("$OPENSSL_BIN" x509 -in "$(to_openssl_path "$SERVER_DIR/server.crt")" \
+  -noout -ext subjectAltName 2>>"$OPENSSL_LOG") || die "读取服务器证书 SAN 失败"
+for d in "${DNS_LIST[@]+"${DNS_LIST[@]}"}"; do
+  # 双引号内的 $d 按字面量比较，*.example.com 中的星号不会被当成模式通配。
+  [[ $SERVER_SAN == *"DNS:$d"* ]] || die "服务器证书 SAN 缺少配置的 DNS 条目：$d"
+done
+for ip in "${IP_LIST[@]+"${IP_LIST[@]}"}"; do
+  [[ $SERVER_SAN == *"IP Address:$ip"* ]] || die "服务器证书 SAN 缺少配置的 IP 条目：$ip"
+done
+check_ok "服务器证书 SAN 与配置的 DNS/IP 列表一致（通配符原样保留）"
 
 # ---------------------------------------------------------------------------
 # 清单与说明
@@ -1045,6 +1175,10 @@ Windows cmd 中请使用反斜杠路径并为含空格/中文的路径加双引�
 七、支持范围与跨平台说明
 ------------------------------------------------
   * 需要 bash 4+ 与 OpenSSL 1.1.1+（3.x 已实测）；不支持 LibreSSL。
+  * --san-dns 支持标准通配符，但只允许覆盖完整的最左侧标签（如 *.example.com）；
+    *example.com、foo.*.example.com、多个星号与空标签均会被拒绝。通配符作为
+    匹配模式原样写入证书，脚本自检改用 mqtt.example.com 这类具体主机名，并确认
+    根域 example.com 与多层子域 a.b.example.com 不会被同一个通配符接受。
   * MSYS2 / Git Bash：脚本关闭了 MSYS 的参数路径自动转换，避免 subject 中的
     “/C=../CN=..” 被改写；若 openssl 是 mingw64/ucrt64 的原生 Windows 程序，
     会自动用 cygpath -m 转换传给 openssl 的文件路径。

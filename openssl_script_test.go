@@ -3,11 +3,11 @@ package main
 // 通过 go test 显式启用的 OpenSSL 脚本集成测试。
 //
 // 默认跳过，不影响基础测试，也不要求开发机安装 OpenSSL：
-//   MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScriptMaterial -v
+//   MQTT_TEST_OPENSSL_SCRIPT=1 go test -run TestOpenSSLScript -v
 //
-// 本测试会在临时目录中实际执行 scripts/gen-test-certs.sh，核对输出结构、
-// 权限、清单，并用项目真实的 StartServer 与生成的 mTLS 材料完成一次
-// 回环 TLS 握手。脚本内部还会用 OpenSSL 复核链、用途、SAN 与时间条件。
+// 这些测试会在临时目录中实际执行 scripts/gen-test-certs.sh，核对输出结构、
+// 权限、清单、DNS SAN（含标准通配符）与非法参数拒绝行为，并用 Go x509 与
+// 项目真实的 StartServer 交叉验证生成材料。
 
 import (
 	"bytes"
@@ -29,22 +29,7 @@ import (
 const opensslScriptEnableEnv = "MQTT_TEST_OPENSSL_SCRIPT"
 
 func TestOpenSSLScriptMaterial(t *testing.T) {
-	if os.Getenv(opensslScriptEnableEnv) != "1" {
-		t.Skipf("未启用 OpenSSL 脚本集成测试；设置 %s=1 后运行（需要 bash 与 OpenSSL >= 1.1.1）", opensslScriptEnableEnv)
-	}
-
-	bashPath, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skipf("未找到 bash，跳过 OpenSSL 脚本集成测试：%v", err)
-	}
-	if _, err := exec.LookPath("openssl"); err != nil {
-		t.Skipf("未找到 openssl，跳过 OpenSSL 脚本集成测试：%v", err)
-	}
-
-	scriptPath := filepath.Join("scripts", "gen-test-certs.sh")
-	if _, err := os.Stat(scriptPath); err != nil {
-		t.Fatalf("缺少证书生成脚本 %s：%v", scriptPath, err)
-	}
+	bashPath, scriptPath := opensslScriptPrerequisites(t)
 
 	// 路径刻意包含空格与中文，验证脚本的引用与 openssl 参数传递。
 	outDir := filepath.Join(t.TempDir(), "设备 测试 证书")
